@@ -125,6 +125,8 @@ body:not([data-located]) #locate { display: none; }
 .notice-item strong { display: block; }
 .notice-item small { display: block; margin-top: 4px; }
 
+.row .more { flex: none; font-size: 26px; color: var(--mute); }
+.row strong { display: block; }
 .head h1.route { font-size: 19px; line-height: 1.2; }
 .dirs { display: flex; flex-wrap: wrap; gap: 6px; }
 .dirs button { min-height: 46px; padding: 8px 14px; border: 0; border-radius: 12px; background: var(--soft); font-size: 15px; font-weight: 700; text-align: left; }
@@ -181,6 +183,7 @@ body:not([data-located]) #locate { display: none; }
   body:not([data-view="home"]) #locate { display: none; }
 }
 @media (max-width: 639.98px) {
+  body[data-view="line"] #sheet[data-size="mid"], body[data-view="bus"] #sheet[data-size="mid"] { max-height: 46dvh; }
   .stop-grid { display: flex; flex-direction: column; gap: 12px; }
 }
 

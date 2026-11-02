@@ -14,18 +14,18 @@ const NOTICES = [{
 // Es lo que entiende quien no conoce la red; `hospital` marca las que llegan al HULA.
 const ROUTES = {
   '1.1': { route: 'Campus USC – Fingoi – O Ceao' },
-  '1.2': { route: 'Campus USC – Fingoi – O Ceao – HULA', hospital: true },
+  '1.2': { route: 'Campus USC – Fingoi – O Ceao – Hospital', hospital: true },
   '1.3': { route: 'Campus USC – Fontiñas – O Ceao' },
-  '1.4': { route: 'Campus USC – Fingoi – O Ceao – HULA', hospital: true },
+  '1.4': { route: 'Campus USC – Fingoi – O Ceao – Hospital', hospital: true },
   2: { route: 'Rda. Xosé Castiñeira – Ramil' },
   '3.1': { route: 'Rda. Muralla (Sindicatos) – Avda. Coruña – Fontiñas – Montirón – A Tolda' },
   '3.2': { route: 'Rda. Muralla (Sindicatos) – Fontiñas – Montirón – A Tolda' },
-  '4.1': { route: 'Rda. Muralla (Sindicatos) – HULA, por Fervedoira', hospital: true },
-  '4.2': { route: 'Rda. Muralla (Sindicatos) – HULA, por As Gándaras', hospital: true },
-  '5DS': { route: 'Avda. das Américas – Magoi – Fontiñas – HULA', hospital: true },
-  '5ES': { route: 'Fonte dos Ranchos – Abella – Garabolos – HULA', hospital: true },
-  '5.1': { route: 'Avda. das Américas – Rda. Muralla – Fontiñas – Carqueixo – HULA', hospital: true },
-  '5.2': { route: 'Avda. das Américas – Magoi – Fontiñas – HULA', hospital: true },
+  '4.1': { route: 'Rda. Muralla (Sindicatos) – Hospital, por Fervedoira', hospital: true },
+  '4.2': { route: 'Rda. Muralla (Sindicatos) – Hospital, por As Gándaras', hospital: true },
+  '5DS': { route: 'Avda. das Américas – Magoi – Fontiñas – Hospital', hospital: true },
+  '5ES': { route: 'Fonte dos Ranchos – Abella – Garabolos – Hospital', hospital: true },
+  '5.1': { route: 'Avda. das Américas – Rda. Muralla – Fontiñas – Carqueixo – Hospital', hospital: true },
+  '5.2': { route: 'Avda. das Américas – Magoi – Fontiñas – Hospital', hospital: true },
   6: { route: 'A Piringalla – Magoi – Acea de Olga – Veterinaria' },
   7: { route: 'Casco Histórico (Bolaño) – Barrio da Ponte' },
   8: { route: 'Casco Histórico (Bolaño) – A Cheda' },
@@ -36,6 +36,7 @@ const ROUTES = {
   13: { route: 'Rda. Muralla (Sindicatos) – As Gándaras' },
 };
 const routeOf = (line) => ROUTES[line.number]?.route ?? line.name;
+const nice = (name) => String(name).replace(/^HULA\b.*$/i, 'Hospital (HULA)');
 const hasWorks = (number) => NOTICES.some((n) => n.lines.includes(number));
 const shortDays = (days) => (/lunes a viernes/i.test(days) ? 'Lunes a viernes' : (/todos/i.test(days) ? 'Todos los días' : days));
 
@@ -62,6 +63,9 @@ const state = {
   busKey: null,
   lineNumber: null,
   lineDir: 0,
+  follow: false,
+  busFromLine: false,
+  stopFromLine: false,
   query: '',
   alert: null,
   buses: [],
@@ -189,6 +193,9 @@ async function initMap() {
       minZoom: 10,
     });
     map.touchZoomRotate.disableRotation();
+    map.on('dragstart', () => { state.follow = false; });
+    map.on('wheel', () => { state.follow = false; });
+    map.on('touchstart', (e) => { if (e.originalEvent?.touches?.length > 1) state.follow = false; });
     new ResizeObserver(() => map.resize()).observe(box);
     map.on('style.load', addOverlays);
     map.on('click', (e) => {
@@ -217,15 +224,15 @@ function mapPadding() {
   const sheet = desktop.matches ? 0 : $('#sheet').getBoundingClientRect().height;
   const side = desktop.matches ? 408 : 0;
   const top = desktop.matches ? 70 : 130;
-  return { top, bottom: sheet + 30, left: side + 40, right: state.view === 'home' ? 40 : 120 };
+  return { top, bottom: sheet + 30, left: side + 40, right: state.view === 'stop' ? 120 : 40 };
 }
 
-function moveTo(points, maxZoom = 15.6) {
+function moveTo(points, maxZoom = 15.6, duration = 700) {
   if (!map) return;
   const lngs = points.map((p) => p[1]);
   const lats = points.map((p) => p[0]);
   const bounds = [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]];
-  map.fitBounds(bounds, { padding: mapPadding(), maxZoom, duration: reduced ? 0 : 700 });
+  map.fitBounds(bounds, { padding: mapPadding(), maxZoom, duration: reduced ? 0 : duration });
 }
 
 const asLine = (coords, properties = {}) => ({ type: 'Feature', properties, geometry: { type: 'LineString', coordinates: coords.map((p) => [p[1], p[0]]) } });
@@ -233,8 +240,12 @@ const asLine = (coords, properties = {}) => ({ type: 'Feature', properties, geom
 /** Atenúa la red cuando hay algo elegido y resalta la línea o el recorrido. */
 function applyMapFocus() {
   if (!mapReady) return;
-  const focused = state.view === 'line' || state.view === 'stop' || state.view === 'bus';
-  map.setPaintProperty('routes', 'line-opacity', focused ? 0.12 : (isDark() ? 0.42 : 0.34));
+  const alone = state.view === 'line' || state.view === 'bus';
+  map.setPaintProperty('routes', 'line-opacity', alone ? 0 : (state.view === 'stop' ? 0.12 : (isDark() ? 0.42 : 0.34)));
+  let ids = null;
+  if (state.view === 'line') ids = net.lines.filter((l) => l.number === state.lineNumber).flatMap((l) => l.dirs.flatMap((d) => d.stops));
+  if (state.view === 'bus') ids = state.busByKey.get(state.busKey)?.dir.stops ?? null;
+  map.setFilter('bus-stops', ids ? ['in', ['get', 'id'], ['literal', [...new Set(ids)]]] : null);
   map.setFilter('route-sel', ['==', ['get', 'number'], state.view === 'line' ? state.lineNumber : '']);
 }
 
@@ -265,6 +276,27 @@ function heroBusKey() {
   return null;
 }
 
+/** Mantiene en pantalla el bus o los buses elegidos hasta que la persona mueva el mapa. */
+function followCamera(duration = 900) {
+  if (!state.follow || !map) return;
+  if (state.view === 'line') {
+    const mine = state.buses.filter((b) => b.line.number === state.lineNumber);
+    const moving = mine.filter((b) => !b.parkedUntil);
+    const list = moving.length ? moving : mine;
+    if (list.length) moveTo(list.map((b) => [b.lat, b.lng]), 15.8, duration);
+  } else if (state.view === 'bus') {
+    const bus = state.busByKey.get(state.busKey);
+    if (!bus) return;
+    const points = [[bus.lat, bus.lng]];
+    const i = state.stopId ? bus.dir.stops.indexOf(state.stopId) : -1;
+    if (i >= bus.nextStopIndex) {
+      const stop = net.stopById.get(state.stopId);
+      points.push([stop.lat, stop.lng]);
+    }
+    moveTo(points, 15.8, duration);
+  }
+}
+
 function updateMarkers() {
   if (!map) return;
   const hero = heroBusKey();
@@ -278,8 +310,9 @@ function updateMarkers() {
     }
     m.marker.setLngLat([bus.lng, bus.lat]);
     m.el.style.setProperty('--r', `${bus.bearing}deg`);
-    const isHero = bus.key === hero;
-    const filtered = state.view === 'line' && bus.line.number !== state.lineNumber;
+    const inLine = state.view === 'line' && bus.line.number === state.lineNumber;
+    const isHero = bus.key === hero || (inLine && !bus.parkedUntil);
+    const filtered = (state.view === 'line' && !inLine) || (state.view === 'bus' && bus.key !== state.busKey);
     m.el.classList.toggle('lead', isHero);
     m.el.classList.toggle('gone', filtered);
     m.el.classList.toggle('dim', Boolean(hero) && !isHero);
@@ -303,7 +336,7 @@ function declutter() {
     const m = markers.get(bus.key);
     if (!m || m.el.classList.contains('gone')) continue;
     const p = map.project([bus.lng, bus.lat]);
-    items.push({ m, x: p.x, y: p.y, fixed: bus.key === hero, ox: 0, oy: 0 });
+    items.push({ m, x: p.x, y: p.y, fixed: bus.key === hero || m.el.classList.contains('lead'), ox: 0, oy: 0 });
   }
   for (let pass = 0; pass < 4; pass++) {
     for (let i = 0; i < items.length; i++) {
@@ -367,7 +400,7 @@ function updatePins() {
     el.className = state.view === 'home' ? 'pin' : 'pin sel';
     if (state.view !== 'home') {
       const tag = document.createElement('span');
-      tag.textContent = stop.name;
+      tag.textContent = nice(stop.name);
       el.append(tag);
     }
     stopPin = new maplibregl.Marker({ element: el }).setLngLat([stop.lng, stop.lat]).addTo(map);
@@ -413,7 +446,7 @@ const MAP_CREDIT = 'Mapa: OpenFreeMap © OpenMapTiles. Datos © OpenStreetMap.';
 function arrivalRow(a, selected) {
   return `<button type="button" class="row${selected ? ' sel' : ''}" data-act="arrival" data-key="${esc(a.key)}" data-stop="${esc(a.stopId)}">
     <span class="badge" style="--c:${a.line.color}">${esc(a.line.number)}</span>
-    <span class="to">${esc(a.dir.dest)}<small>a las ${a.time}</small></span>
+    <span class="to">${esc(nice(a.dir.dest))}<small>a las ${a.time}</small></span>
     <span class="eta">${minutesHTML(a.eta)}</span>
   </button>`;
 }
@@ -447,7 +480,7 @@ function homeHTML() {
   const rows = list.length
     ? `<div class="rows">${list.map((a) => arrivalRow(a, false)).join('')}</div>`
     : '<p class="empty">No pasa ningún bus por aquí en las próximas dos horas.</p>';
-  return `<div class="head"><div><h1>${esc(stop.name)}</h1><small>${esc(where)}</small></div></div>${rows}${wake}
+  return `<div class="head"><div><h1>${esc(nice(stop.name))}</h1><small>${esc(where)}</small></div></div>${rows}${wake}
     <button type="button" class="cta second" data-act="menu">Ver todas las líneas</button>`;
 }
 
@@ -466,7 +499,7 @@ function stopHTML() {
   const list = arrivalsFor(stop.id);
   const hero = list.find((a) => a.key === state.arrivalKey) ?? list[0];
   const sub = stop.code ? `Código de parada: ${esc(stop.code)}` : 'Parada';
-  const head = `<div class="head">${BACK}<div><h1>${esc(stop.name)}</h1><small>${sub}</small></div></div>`;
+  const head = `<div class="head">${BACK}<div><h1>${esc(nice(stop.name))}</h1><small>${sub}</small></div></div>`;
   if (!hero) return `${head}<p class="empty">No pasa ningún bus por aquí en las próximas dos horas.</p>${FOOT}`;
   const bus = state.busByKey.get(hero.key);
   const label = hero.eta === 0 ? 'El próximo bus' : (bus ? 'El próximo bus llega en' : 'Sale del inicio de la línea en');
@@ -481,7 +514,7 @@ function stopHTML() {
           <div><p>${label}</p><div class="bignum">${big}</div></div>
           <div class="hero-side"><span class="badge big" style="--c:${hero.line.color}">${esc(hero.line.number)}</span><span>a las ${hero.time}</span></div>
         </div>
-        <p class="hacia">Hacia <strong>${esc(hero.dir.dest)}</strong></p>
+        <p class="hacia">Hacia <strong>${esc(nice(hero.dir.dest))}</strong></p>
         ${bus ? stepsHTML(bus, hero) : ''}
         <div class="buttons">
           ${canAlert ? `<button type="button" class="cta${armed ? ' on' : ''}" data-act="alert" data-key="${esc(hero.key)}">${armed ? 'Aviso activado · Quitar' : 'Avísame 2 min antes'}</button>` : ''}
@@ -500,7 +533,7 @@ function busHTML() {
   const c = clock();
   if (bus.parkedUntil) {
     const end = net.stopById.get(bus.dir.stops[bus.dir.stops.length - 1]);
-    return `<div class="head">${BACK}<span class="badge" style="--c:${bus.line.color}">${esc(bus.line.number)}</span><div><small>Parado en ${esc(end.name)}</small></div></div>
+    return `<div class="head">${BACK}<span class="badge" style="--c:${bus.line.color}">${esc(bus.line.number)}</span><div><small>Parado en ${esc(nice(end.name))}</small></div></div>
       <p class="big-line">Vuelve a salir a las ${formatMinutes(bus.parkedUntil)}</p>${FOOT}`;
   }
   const svc = bus.dir.svc[c.kind];
@@ -515,9 +548,9 @@ function busHTML() {
     const i = from + offset;
     const cls = i < bus.nextStopIndex ? 'past' : (i === mine ? 'you' : '');
     const name = net.stopById.get(id)?.name ?? id;
-    return `<li class="${cls}"><time>${formatMinutes(passTime(svc, bus.run, i))}</time><span class="rail"></span><span>${esc(name)}${i === mine ? ' · Tu parada' : ''}</span></li>`;
+    return `<li class="${cls}"><time>${formatMinutes(passTime(svc, bus.run, i))}</time><span class="rail"></span><span>${esc(nice(name))}${i === mine ? ' · Tu parada' : ''}</span></li>`;
   }).join('');
-  return `<div class="head">${BACK}<span class="badge" style="--c:${bus.line.color}">${esc(bus.line.number)}</span><div><small>Hacia ${esc(bus.dir.dest)}</small></div></div>
+  return `<div class="head">${BACK}<span class="badge" style="--c:${bus.line.color}">${esc(bus.line.number)}</span><div><small>Hacia ${esc(nice(bus.dir.dest))}</small></div></div>
     <p class="big-line">${title}</p>
     <ol class="tl">${rows}</ol>${FOOT}`;
 }
@@ -526,38 +559,81 @@ function lineDirections() {
   return net.lines.filter((l) => l.number === state.lineNumber).flatMap((line) => line.dirs.map((dir) => ({ line, dir })));
 }
 
+function nextDepartureOf(number, kind, t) {
+  let best = null;
+  for (const line of net.lines) {
+    if (line.number !== number) continue;
+    for (const dir of line.dirs) {
+      const svc = dir.svc[kind];
+      if (!svc) continue;
+      for (const dep of svc.dep) {
+        const start = dep + svc.off[0];
+        if (start >= t && (best === null || start < best)) best = start;
+      }
+    }
+  }
+  return best;
+}
+
+function busRow(bus, kind) {
+  const svc = bus.dir.svc[kind];
+  const stops = bus.dir.stops;
+  if (bus.parkedUntil) {
+    const end = net.stopById.get(stops[stops.length - 1]);
+    return `<div class="row"><span class="to"><strong>Parado en ${esc(nice(end?.name ?? ''))}</strong><small>Vuelve a salir a las ${formatMinutes(bus.parkedUntil)}</small></span></div>`;
+  }
+  const next = net.stopById.get(stops[bus.nextStopIndex]);
+  const arrival = formatMinutes(passTime(svc, bus.run, stops.length - 1));
+  const where = bus.stopped ? `Parado en ${nice(next?.name ?? '')}` : `Próxima parada: ${nice(next?.name ?? '')}`;
+  return `<button type="button" class="row" data-act="follow" data-key="${esc(bus.key)}">
+    <span class="to"><strong>Hacia ${esc(nice(bus.dir.dest))}</strong><small>${esc(where)}<br>Llega al final a las ${arrival}</small></span>
+    <span class="more" aria-hidden="true">›</span>
+  </button>`;
+}
+
 function lineHTML() {
   const group = net.lines.filter((l) => l.number === state.lineNumber);
   const line = group[0];
-  const running = state.buses.filter((b) => b.line.number === state.lineNumber && !b.parkedUntil).length;
-  const stateText = running === 0 ? 'Ningún bus en ruta ahora' : `${running} bus${running === 1 ? '' : 'es'} en ruta ahora`;
+  const c = clock();
+  const mine = state.buses.filter((b) => b.line.number === state.lineNumber);
+  const moving = mine.filter((b) => !b.parkedUntil).length;
+  const stateText = moving === 0 ? 'Ahora mismo no hay ningún bus en marcha' : (moving === 1 ? 'Hay 1 bus en marcha' : `Hay ${moving} buses en marcha`);
+  let statusRows = mine.map((b) => busRow(b, c.kind)).join('');
+  if (!mine.length) {
+    const next = nextDepartureOf(state.lineNumber, c.kind, c.t);
+    statusRows = `<p class="empty">${next === null ? 'Hoy ya no hay más salidas de esta línea.' : `La próxima salida es a las ${formatMinutes(next)}.`}</p>`;
+  }
   const dirs = lineDirections();
-  const current = dirs[Math.min(state.lineDir, dirs.length - 1)];
+  const index = Math.min(state.lineDir, dirs.length - 1);
+  const current = dirs[index];
   const hours = [...new Set(group.map((l) => [shortDays(l.days), /consultar/i.test(l.frequency) ? '' : l.frequency, `de ${l.first} a ${l.last}`].filter(Boolean).join(' · ')))];
   const notice = hasWorks(state.lineNumber) ? `<div class="notice-item"><strong>Cambios por obras</strong>${esc(NOTICES[0].body)}</div>` : '';
   const dests = dirs.map((d) => d.dir.dest);
-  const dirLabel = (d) => (dests.filter((x) => x === d.dir.dest).length > 1 ? `De ${d.dir.origin} a ${d.dir.dest}` : `Hacia ${d.dir.dest}`);
-  const buttons = dirs.map((d, i) => `<button type="button" data-act="line-dir" data-index="${i}" aria-pressed="${i === Math.min(state.lineDir, dirs.length - 1)}">${esc(dirLabel(d))}</button>`).join('');
+  const dirLabel = (d) => (dests.filter((x) => x === d.dir.dest).length > 1 ? `De ${nice(d.dir.origin)} a ${nice(d.dir.dest)}` : `Hacia ${nice(d.dir.dest)}`);
+  const buttons = dirs.map((d, i) => `<button type="button" data-act="line-dir" data-index="${i}" aria-pressed="${i === index}">${esc(dirLabel(d))}</button>`).join('');
   const stops = current.dir.stops.map((id) => {
     const stop = net.stopById.get(id);
-    return `<button type="button" class="row" data-act="stop" data-id="${esc(id)}"><span class="to">${esc(stop?.name ?? id)}</span></button>`;
+    return `<button type="button" class="row" data-act="stop" data-id="${esc(id)}"><span class="to">${esc(nice(stop?.name ?? id))}</span></button>`;
   }).join('');
-  return `<div class="head">${BACK}<span class="badge big" style="--c:${line.color}">${esc(line.number)}</span><div><h1 class="route">${esc(routeOf(line))}</h1><small>${stateText}</small></div></div>
-    <p class="hours">${hours.map(esc).join('<br>')}</p>${notice}
+  return `<div class="head">${BACK}<span class="badge big" style="--c:${line.color}">${esc(line.number)}</span><div><h1 class="route">${esc(routeOf(line))}</h1></div></div>
+    <div class="rows"><h2>${stateText}</h2>${statusRows}</div>
+    ${notice}
+    <p class="hours">${hours.map(esc).join('<br>')}</p>
+    <div class="rows"><h2>Paradas (${current.dir.stops.length})</h2></div>
     <div class="dirs" role="group" aria-label="Sentido">${buttons}</div>
-    <div class="rows"><h2>${current.dir.stops.length} paradas</h2>${stops}</div>${FOOT}`;
+    <div class="rows">${stops}</div>${FOOT}`;
 }
 
 function searchHTML() {
   const q = norm(state.query.trim());
   if (!q) return `<div class="head">${BACK}<div><h1>Buscar</h1><small>Escribe el nombre de una parada o una línea</small></div></div>`;
   const lines = [...new Map(net.lines.filter((l) => norm(l.number).startsWith(q) || norm(routeOf(l)).includes(q) || norm(l.name).includes(q) || (ROUTES[l.number]?.hospital && 'hospital'.startsWith(q))).map((l) => [l.number, l])).values()].slice(0, 8);
-  const stops = net.stops.filter((s) => norm(s.name).includes(q) || (s.code && s.code.toLowerCase() === q)).slice(0, 30);
+  const stops = net.stops.filter((s) => norm(s.name).includes(q) || norm(nice(s.name)).includes(q) || (s.code && s.code.toLowerCase() === q)).slice(0, 30);
   if (!lines.length && !stops.length) return `<div class="head">${BACK}<div><h1>Sin resultados</h1><small>Prueba con otra parte del nombre, como «Fontiñas» o «HULA»</small></div></div>`;
   return `<div class="head">${BACK}<div><h1>${stops.length + lines.length} resultado${stops.length + lines.length === 1 ? '' : 's'}</h1></div></div>
     <div class="rows">
       ${lines.map((l) => `<button type="button" class="row" data-act="line" data-number="${esc(l.number)}"><span class="badge" style="--c:${l.color}">${esc(l.number)}</span><span class="to">${esc(routeOf(l))}</span></button>`).join('')}
-      ${stops.map((s) => `<button type="button" class="row" data-act="stop" data-id="${esc(s.id)}"><span class="to">${esc(s.name)}<small>${s.lines.length} línea${s.lines.length === 1 ? '' : 's'}</small></span></button>`).join('')}
+      ${stops.map((s) => `<button type="button" class="row" data-act="stop" data-id="${esc(s.id)}"><span class="to">${esc(nice(s.name))}<small>${s.lines.length} línea${s.lines.length === 1 ? '' : 's'}</small></span></button>`).join('')}
     </div>`;
 }
 
@@ -566,7 +642,7 @@ function menuHTML() {
   const c = clock();
   const simText = c.live ? 'Mira cómo se mueven los buses en otro momento' : `Ahora ves las ${formatMinutes(Math.floor(c.t))}`;
   const rows = numbers.map((l) => {
-    const hospital = (ROUTES[l.number]?.hospital ? ' · Va al hospital' : '') + (hasWorks(l.number) ? ' · Cambios por obras' : '');
+    const hospital = hasWorks(l.number) ? ' · Cambios por obras' : '';
     return `<button type="button" class="row" data-act="line" data-number="${esc(l.number)}">
       <span class="badge" style="--c:${l.color}">${esc(l.number)}</span>
       <span class="to">${esc(routeOf(l))}<small>${esc(shortDays(l.days))}${hospital}</small></span>
@@ -655,6 +731,8 @@ function go(view) {
 
 function selectStop(id, keepArrival = false) {
   if (!net.stopById.has(id)) return;
+  state.stopFromLine = state.view === 'line';
+  state.follow = false;
   state.stopId = id;
   if (!keepArrival) state.arrivalKey = null;
   $('#q').value = '';
@@ -676,25 +754,29 @@ function focusHero() {
 
 function selectBus(key) {
   state.busKey = key;
+  state.busFromLine = state.view === 'line';
+  state.follow = true;
   state.previous = state.view === 'bus' ? state.previous : state.view;
   go('bus');
   const bus = state.busByKey.get(key);
   if (bus) {
-    const i = state.stopId ? bus.dir.stops.indexOf(state.stopId) : -1;
-    const target = i >= bus.nextStopIndex ? i : Math.min(bus.nextStopIndex + 6, bus.dir.stops.length - 1);
-    requestAnimationFrame(() => moveTo(approachPath(bus, target)));
+    requestAnimationFrame(() => followCamera(700));
   }
 }
 
 function selectLine(number) {
   state.lineNumber = number;
   state.lineDir = 0;
+  state.stopId = null;
+  state.follow = true;
   go('line');
+  const onRoad = state.buses.some((b) => b.line.number === number);
   const points = net.lines.filter((l) => l.number === number).flatMap((l) => l.dirs.flatMap((d) => d.path));
-  requestAnimationFrame(() => moveTo(points, 15));
+  requestAnimationFrame(() => (onRoad ? followCamera(700) : moveTo(points, 15)));
 }
 
 function goHome() {
+  state.follow = false;
   state.stopId = null;
   state.arrivalKey = null;
   state.busKey = null;
@@ -706,7 +788,15 @@ function goHome() {
 }
 
 function goBack() {
-  if (state.view === 'bus' && state.stopId) { go('stop'); focusHero(); return; }
+  if (state.view === 'bus' && state.busFromLine) { state.follow = true; go('line'); followCamera(700); return; }
+  if (state.view === 'bus' && state.stopId) { state.follow = false; go('stop'); focusHero(); return; }
+  if (state.view === 'stop' && state.stopFromLine) {
+    state.stopId = null;
+    state.follow = true;
+    go('line');
+    followCamera(700);
+    return;
+  }
   if (['line', 'notices', 'sim'].includes(state.view)) {
     go('menu');
     if (map) requestAnimationFrame(() => map.fitBounds(CITY_BOUNDS, { padding: mapPadding(), duration: reduced ? 0 : 700 }));
@@ -749,6 +839,7 @@ function wire() {
     else if (act === 'notices') go('notices');
     else if (act === 'line-dir') {
       state.lineDir = Number(t.dataset.index);
+      state.follow = false;
       renderSheet();
       const d = lineDirections()[state.lineDir];
       requestAnimationFrame(() => moveTo(d.dir.path, 15));
@@ -798,8 +889,8 @@ function wire() {
   });
   $('#locate').addEventListener('click', locate);
   $('#credit').addEventListener('click', () => toast(MAP_CREDIT));
-  $('#zoom-in').addEventListener('click', () => map?.zoomIn());
-  $('#zoom-out').addEventListener('click', () => map?.zoomOut());
+  $('#zoom-in').addEventListener('click', () => { state.follow = false; map?.zoomIn(); });
+  $('#zoom-out').addEventListener('click', () => { state.follow = false; map?.zoomOut(); });
   $('#clock').addEventListener('click', () => { if (sim.on) go('sim'); });
   const slider = $('#sim-time');
   slider.addEventListener('pointerdown', () => { sliderHeld = true; });
@@ -920,6 +1011,7 @@ async function start() {
     renderClock();
     checkAlert();
   }, 1000);
+  setInterval(() => followCamera(), 3000);
   await initMap();
   updatePins();
   const initial = location.hash.slice(1);
