@@ -1,0 +1,79 @@
+# Buses de Lugo · simulación en directo de los buses urbanos en /demo
+# Stack para Portainer: pega este fichero en Stacks > Add stack > Web editor.
+#
+# Al arrancar, el contenedor descarga la rama indicada del repositorio de GitHub
+# y la sirve con nginx. Para actualizar: haz push a GitHub y reinicia el contenedor.
+# Si GitHub no responde al reiniciar, sigue sirviendo la última copia descargada.
+#
+# Va en Servidor-Contabo, dentro de la red de Nginx Proxy Manager, sin puertos publicados.
+# En NPM: bus.marcogugliandolo.com -> http://bus-lugo:3000
+# La ubicación del móvil solo funciona con https.
+#
+# Variables opcionales (Portainer > Environment variables):
+#   BUS_REPO      usuario/repositorio (por defecto marcogugliandolo/bus-lugo)
+#   BUS_BRANCH    rama (por defecto main)
+#   GITHUB_TOKEN  solo si el repositorio es privado (token con permiso de lectura)
+
+services:
+  bus-lugo:
+    image: nginx:1.27-alpine
+    container_name: bus-lugo
+    restart: unless-stopped
+    networks:
+      - npm
+    environment:
+      REPO: ${BUS_REPO:-marcogugliandolo/bus-lugo}
+      BRANCH: ${BUS_BRANCH:-main}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      TZ: Europe/Madrid
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        WEB=/usr/share/nginx/html
+        TMP=/tmp/bus-lugo
+        rm -rf "$$TMP" && mkdir -p "$$TMP"
+
+        fetch() {
+          if [ -n "$$GITHUB_TOKEN" ]; then
+            wget -q -T 30 --header "Authorization: Bearer $$GITHUB_TOKEN" \
+              -O "$$TMP/src.tgz" "https://api.github.com/repos/$$REPO/tarball/$$BRANCH"
+          else
+            wget -q -T 30 -O "$$TMP/src.tgz" \
+              "https://codeload.github.com/$$REPO/tar.gz/refs/heads/$$BRANCH"
+          fi
+        }
+
+        if fetch && tar -xzf "$$TMP/src.tgz" -C "$$TMP"; then
+          SRC=$$(find "$$TMP" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+          if [ -f "$$SRC/app/demo/index.html" ] && [ -f "$$SRC/nginx.conf" ]; then
+            rm -rf "$$WEB"/* "$$WEB"/.bus-version
+            cp -r "$$SRC/app/." "$$WEB/"
+            cp "$$SRC/nginx.conf" /etc/nginx/conf.d/default.conf
+            date '+%Y-%m-%d %H:%M:%S' > "$$WEB/.bus-version"
+            echo "[bus-lugo] desplegado $$REPO@$$BRANCH"
+          else
+            echo "[bus-lugo] el repositorio no tiene app/demo/index.html o nginx.conf"
+          fi
+        else
+          echo "[bus-lugo] no se pudo descargar $$REPO@$$BRANCH"
+        fi
+        rm -rf "$$TMP"
+
+        if [ ! -f "$$WEB/.bus-version" ]; then
+          echo "[bus-lugo] no hay ninguna copia que servir; reintento en 15 s"
+          sleep 15
+          exit 1
+        fi
+
+        nginx -t && exec nginx -g 'daemon off;'
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+networks:
+  npm:
+    external: true
+    name: npm-master_default

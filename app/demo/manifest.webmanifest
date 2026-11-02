@@ -1,0 +1,12 @@
+{
+  "name": "Buses de Lugo",
+  "short_name": "Buses Lugo",
+  "description": "Simulación en directo de los autobuses urbanos de Lugo.",
+  "lang": "es",
+  "start_url": "/demo/",
+  "scope": "/demo/",
+  "display": "standalone",
+  "background_color": "#121416",
+  "theme_color": "#121416",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}
