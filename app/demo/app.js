@@ -224,7 +224,8 @@ function mapPadding() {
   const sheet = desktop.matches ? 0 : $('#sheet').getBoundingClientRect().height;
   const side = desktop.matches ? 408 : 0;
   const top = desktop.matches ? 70 : 130;
-  return { top, bottom: sheet + 30, left: side + 40, right: state.view === 'stop' ? 120 : 40 };
+  const lead = state.view === 'line' || state.view === 'bus' ? 40 : 0; // el bus resaltado es más grande
+  return { top: top + lead, bottom: sheet + 30 + lead, left: side + 40 + lead, right: (state.view === 'stop' ? 120 : 40) + lead };
 }
 
 function moveTo(points, maxZoom = 15.6, duration = 700) {
