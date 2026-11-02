@@ -5,10 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Xa Vén</title>
 <meta name="description" content="Xa Vén: mira por dónde va tu bus en Lugo y cuándo llega a tu parada.">
-<meta name="theme-color" content="#121416">
+<meta name="theme-color" content="#1C4FD6">
 <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -17,7 +18,7 @@
 <p id="nomap" hidden>Tu navegador no puede dibujar el mapa. Las paradas y los horarios funcionan igual.</p>
 
 <aside class="side">
-  <p class="brand">Xa Vén</p>
+  <p class="brand"><img src="icon.svg" width="30" height="30" alt="">Xa Vén</p>
   <div class="top">
     <label class="search" for="q">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
@@ -50,6 +51,7 @@
   </section>
 </aside>
 
+<button type="button" id="theme" class="round"></button>
 <button type="button" id="clock"></button>
 
 <button type="button" id="locate" class="round" aria-label="Buscar la parada más cercana a mí">

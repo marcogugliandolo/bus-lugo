@@ -126,17 +126,26 @@ function syncSimPanel() {
   $('#sim-live').hidden = c.live;
 }
 
-/* ---------- Tema: automático, claro u oscuro; se recuerda en este dispositivo ---------- */
+/* ---------- Tema: sigue al sistema hasta que la persona elige con el botón ---------- */
+const SUN = '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"></circle><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.5 1.5M17.2 17.2l1.5 1.5M5.3 18.7l1.5-1.5M17.2 6.8l1.5-1.5"></path></svg>';
+const MOON = '<svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"></path></svg>';
 function readTheme() {
-  try { return localStorage.getItem('xaven-tema') || 'auto'; } catch { return 'auto'; }
+  try { return localStorage.getItem('xaven-tema'); } catch { return null; }
 }
-let themeChoice = readTheme();
-function applyTheme() {
-  const root = document.documentElement;
-  if (themeChoice === 'auto') delete root.dataset.theme;
-  else root.dataset.theme = themeChoice;
+function paintThemeButton() {
+  const dark = isDark();
+  const button = $('#theme');
+  button.innerHTML = dark ? SUN : MOON;
+  button.setAttribute('aria-label', dark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro');
+  button.title = dark ? 'Modo claro' : 'Modo oscuro';
 }
-applyTheme();
+function setTheme(value) {
+  document.documentElement.dataset.theme = value;
+  try { localStorage.setItem('xaven-tema', value); } catch { /* se aplica solo a esta visita */ }
+  paintThemeButton();
+}
+const savedTheme = readTheme();
+if (savedTheme === 'light' || savedTheme === 'dark') document.documentElement.dataset.theme = savedTheme;
 
 /* ---------- Mapa ---------- */
 const isDark = () => {
@@ -512,7 +521,7 @@ function homeHTML() {
     ? `<p class="empty">Ahora mismo no hay buses en la calle.</p><button type="button" class="cta second" data-act="sim10">Ver cómo se mueven a las 10:00</button>`
     : '';
   if (!state.homeStopId) {
-    return `<p class="eyebrow">Xa Vén · Los buses de Lugo</p><div class="head"><div><h1>¿A dónde quieres ir?</h1><small>Toca un bus o una parada para saber cuándo llega</small></div></div>
+    return `<p class="eyebrow"><img src="icon.svg" width="24" height="24" alt=""><span>Xa Vén</span> Los buses de Lugo</p><div class="head"><div><h1>¿A dónde quieres ir?</h1><small>Toca un bus o una parada para saber cuándo llega</small></div></div>
       <div class="buttons one">
         <button type="button" class="cta" data-act="near">Ver la parada más cercana</button>
         <button type="button" class="cta second" data-act="menu">Ver todas las líneas</button>
@@ -694,11 +703,6 @@ function menuHTML() {
   }).join('');
   return `<div class="head">${BACK}<div><h1>Todas las líneas</h1><small>Toca una línea para ver su recorrido y sus paradas</small></div></div>
     <div class="rows">${rows}</div>
-    <div class="rows"><h2>Apariencia</h2>
-      <div class="seg theme-seg" role="group" aria-label="Apariencia">
-        ${[['light', 'Claro'], ['dark', 'Oscuro'], ['auto', 'Auto']].map(([v, t]) => `<button type="button" data-act="theme" data-value="${v}" aria-pressed="${themeChoice === v}">${t}</button>`).join('')}
-      </div>
-    </div>
     <div class="rows">
       <button type="button" class="row" data-act="notices"><span class="to">Avisos del servicio</span><span class="count">${NOTICES.length}</span></button>
       <button type="button" class="row" data-act="sim"><span class="to">Ver otra hora<small>${esc(simText)}</small></span></button>
@@ -891,12 +895,6 @@ function wire() {
     else if (act === 'line') selectLine(t.dataset.number);
     else if (act === 'follow') selectBus(t.dataset.key);
     else if (act === 'notices') go('notices');
-    else if (act === 'theme') {
-      themeChoice = t.dataset.value;
-      try { localStorage.setItem('xaven-tema', themeChoice); } catch { /* se aplica solo a esta visita */ }
-      applyTheme();
-      renderSheet();
-    }
     else if (act === 'line-dir') {
       state.lineDir = Number(t.dataset.index);
       state.follow = false;
@@ -949,6 +947,9 @@ function wire() {
   });
   $('#locate').addEventListener('click', locate);
   $('#credit').addEventListener('click', () => toast(MAP_CREDIT));
+  $('#theme').addEventListener('click', () => setTheme(isDark() ? 'light' : 'dark'));
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paintThemeButton);
+  paintThemeButton();
   $('#zoom-in').addEventListener('click', () => { state.follow = false; map?.zoomIn(); });
   $('#zoom-out').addEventListener('click', () => { state.follow = false; map?.zoomOut(); });
   $('#clock').addEventListener('click', () => { if (sim.on) go('sim'); });

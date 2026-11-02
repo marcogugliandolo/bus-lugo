@@ -54,9 +54,10 @@ h1, h2, p { margin: 0; }
 .round { position: relative; flex: none; display: grid; place-items: center; width: 48px; height: 48px; padding: 0; border: 0; border-radius: 50%; background: var(--surface); box-shadow: 0 2px 12px var(--shadow); }
 .round .dot { position: absolute; right: 12px; top: 11px; width: 10px; height: 10px; border: 2px solid var(--surface); border-radius: 50%; background: var(--alert); }
 
+#theme { position: fixed; z-index: 3; right: var(--gutter-r); top: calc(68px + env(safe-area-inset-top, 0px)); width: 44px; height: 44px; }
 #clock:disabled { opacity: 1; }
 .menu-btn { width: auto; display: flex; gap: 8px; padding: 0 16px; border-radius: 24px; font-size: 16px; font-weight: 700; }
-#clock { position: fixed; z-index: 3; right: var(--gutter-r); top: calc(70px + env(safe-area-inset-top, 0px)); display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 4px 12px; border: 0; border-radius: 17px; background: var(--ink); color: var(--on-ink); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; box-shadow: 0 2px 10px var(--shadow); }
+#clock { position: fixed; z-index: 3; right: calc(var(--gutter-r) + 52px); top: calc(73px + env(safe-area-inset-top, 0px)); display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 4px 12px; border: 0; border-radius: 17px; background: var(--ink); color: var(--on-ink); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; box-shadow: 0 2px 10px var(--shadow); }
 #clock i { width: 8px; height: 8px; border-radius: 50%; background: var(--live); }
 #clock.sim i { background: #F5B301; }
 #simpanel { flex: none; display: grid; gap: 12px; padding: 0 max(20px, env(safe-area-inset-right, 0px)) 16px max(20px, env(safe-area-inset-left, 0px)); }
@@ -128,8 +129,9 @@ body:not([data-located]) #locate { display: none; }
 
 .row .more { flex: none; font-size: 26px; color: var(--mute); }
 .row strong { display: block; }
-.eyebrow { font-size: 14px; font-weight: 700; color: var(--mute); margin-bottom: -6px; }
-.theme-seg { margin-top: 8px; }
+.eyebrow { display: flex; align-items: center; gap: 7px; font-size: 14px; color: var(--mute); margin-bottom: -4px; }
+.eyebrow img { border-radius: 6px; }
+.eyebrow span { font-family: var(--display); font-size: 16px; font-weight: 700; color: var(--ink); }
 .head h1.route { font-size: 19px; line-height: 1.2; }
 .dirs { display: flex; flex-wrap: wrap; gap: 6px; }
 .dirs button { min-height: 46px; padding: 8px 14px; border: 0; border-radius: 12px; background: var(--soft); font-size: 15px; font-weight: 700; text-align: left; }
@@ -175,7 +177,8 @@ body:not([data-located]) #locate { display: none; }
 /* Tablet: el panel flota y aprovecha el ancho */
 @media (min-width: 640px) and (max-width: 999.98px) {
   .top { left: 24px; right: 24px; top: calc(20px + env(safe-area-inset-top, 0px)); }
-  #clock { right: 24px; top: calc(78px + env(safe-area-inset-top, 0px)); }
+  #theme { right: 24px; top: calc(78px + env(safe-area-inset-top, 0px)); }
+  #clock { right: 76px; top: calc(83px + env(safe-area-inset-top, 0px)); }
   #sheet { left: 24px; right: 24px; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); padding-bottom: 0; border-radius: 22px; max-height: 44dvh; }
   #sheet[data-size="tall"] { max-height: 76dvh; }
   #locate { right: 24px; bottom: calc(var(--sheet-h) + 64px); }
@@ -196,7 +199,8 @@ body:not([data-located]) #locate { display: none; }
   :root { --side: 408px; --sheet-h: 0px; }
   .side { position: fixed; z-index: 4; left: 0; top: 0; bottom: 0; width: var(--side); display: flex; flex-direction: column; gap: 12px; padding: 22px 24px 16px; background: var(--surface); box-shadow: 4px 0 24px var(--shadow); }
   .eyebrow { display: none; }
-  .brand { display: block; font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+  .brand img { border-radius: 8px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-family: var(--display); font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
   .top { position: static; }
   .search { height: 46px; padding: 0 14px; background: var(--soft); border-radius: 12px; box-shadow: none; }
   .search input { font-size: 15px; }
@@ -205,7 +209,8 @@ body:not([data-located]) #locate { display: none; }
   #sheet { position: static; flex: 1; min-height: 0; max-height: none !important; background: transparent; border-radius: 0; box-shadow: none; padding: 0; }
   #grab { display: none; }
   #sheet-body { padding: 0; }
-  #clock { right: 20px; top: 16px; }
+  #theme { right: 20px; top: 16px; }
+  #clock { right: 72px; top: 21px; }
   #simpanel { padding: 0; }
   #locate { right: 20px; bottom: 144px; }
   .zoom { position: fixed; z-index: 2; right: 20px; bottom: 44px; display: flex; flex-direction: column; border-radius: 12px; background: var(--surface); box-shadow: 0 2px 10px var(--shadow); }
