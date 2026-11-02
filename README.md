@@ -8,7 +8,7 @@ Es una **simulación**: nadie publica la posición real de estos buses. Cada bus
 
 1. Sube este repositorio a GitHub como `marcogugliandolo/bus-lugo`.
 2. **Stacks › Add stack › Web editor** y pega `docker-compose.yml`.
-3. Despliega en Servidor-Contabo. El contenedor entra en la red `npm-master_default` y no publica puertos.
+3. Despliega en Servidor-Contabo. El contenedor entra en la red `npm-master_default` y publica el puerto `3091` (se cambia con `BUS_PORT`).
 4. En Nginx Proxy Manager, apunta `bus.marcogugliandolo.com` a `http://bus-lugo:3000` con https.
 
 `/` redirige a `/demo/`. Para publicar cambios: push a GitHub y reinicia el contenedor.

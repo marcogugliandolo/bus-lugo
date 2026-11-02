@@ -5,11 +5,12 @@
 # y la sirve con nginx. Para actualizar: haz push a GitHub y reinicia el contenedor.
 # Si GitHub no responde al reiniciar, sigue sirviendo la última copia descargada.
 #
-# Va en Servidor-Contabo, dentro de la red de Nginx Proxy Manager, sin puertos publicados.
+# Va en Servidor-Contabo, dentro de la red de Nginx Proxy Manager, y publica el puerto 3091.
 # En NPM: bus.marcogugliandolo.com -> http://bus-lugo:3000
 # La ubicación del móvil solo funciona con https.
 #
 # Variables opcionales (Portainer > Environment variables):
+#   BUS_PORT      puerto del servidor (por defecto 3091)
 #   BUS_REPO      usuario/repositorio (por defecto marcogugliandolo/bus-lugo)
 #   BUS_BRANCH    rama (por defecto main)
 #   GITHUB_TOKEN  solo si el repositorio es privado (token con permiso de lectura)
@@ -19,6 +20,8 @@ services:
     image: nginx:1.27-alpine
     container_name: bus-lugo
     restart: unless-stopped
+    ports:
+      - "${BUS_PORT:-3091}:3000"
     networks:
       - npm
     environment:
