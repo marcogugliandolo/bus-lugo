@@ -23,42 +23,33 @@
       <span class="sr">Buscar parada o línea</span>
       <input id="q" type="search" placeholder="¿A qué parada vas?" autocomplete="off" enterkeyhint="search">
     </label>
-    <button type="button" id="bell" class="round" aria-label="Avisos del servicio">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>
+    <button type="button" id="menu" class="round" aria-label="Abrir el menú: líneas, avisos y simulación">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
       <span class="dot"></span>
     </button>
   </div>
-  <button type="button" id="notice" class="notice">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4 3 20h18z"></path><path d="M12 10v4"></path><path d="M12 17v.5"></path></svg>
-    Obras: cambios en las líneas 7, 8, 9 y 12
-  </button>
   <section id="sheet" data-size="mid" aria-label="Información">
     <button type="button" id="grab" aria-label="Cambiar el tamaño del panel"><span></span></button>
     <div id="sheet-body"></div>
+    <div id="simpanel" hidden>
+      <label for="sim-time" class="sim-row"><span>Hora</span><output id="sim-out">10:00</output></label>
+      <input id="sim-time" type="range" min="300" max="1439" step="1" value="600">
+      <div class="seg" role="group" aria-label="Tipo de día">
+        <button type="button" data-day="laborable">Laborable</button>
+        <button type="button" data-day="sabado">Sábado</button>
+        <button type="button" data-day="domingo">Domingo</button>
+      </div>
+      <div class="seg" role="group" aria-label="Velocidad">
+        <button type="button" data-speed="1">×1</button>
+        <button type="button" data-speed="10">×10</button>
+        <button type="button" data-speed="60">×60</button>
+      </div>
+      <button type="button" id="sim-live" class="ghost">Volver a ahora</button>
+    </div>
   </section>
 </aside>
 
-<nav id="chips" aria-label="Filtrar por línea"></nav>
-
-<div class="clock-wrap">
-  <button type="button" id="clock" aria-expanded="false" aria-controls="simpanel"></button>
-  <div id="simpanel" hidden>
-    <p class="sim-title">Simular otro momento</p>
-    <label for="sim-time" class="sim-row"><span>Hora</span><output id="sim-out">10:00</output></label>
-    <input id="sim-time" type="range" min="300" max="1439" step="1" value="600">
-    <div class="seg" role="group" aria-label="Tipo de día">
-      <button type="button" data-day="laborable">Laborable</button>
-      <button type="button" data-day="sabado">Sábado</button>
-      <button type="button" data-day="domingo">Domingo</button>
-    </div>
-    <div class="seg" role="group" aria-label="Velocidad">
-      <button type="button" data-speed="1">×1</button>
-      <button type="button" data-speed="10">×10</button>
-      <button type="button" data-speed="60">×60</button>
-    </div>
-    <button type="button" id="sim-live" class="ghost">Volver a ahora</button>
-  </div>
-</div>
+<button type="button" id="clock"></button>
 
 <button type="button" id="locate" class="round" aria-label="Buscar la parada más cercana a mí">
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 3 10.5l7.5 3 3 7.5z"></path></svg>

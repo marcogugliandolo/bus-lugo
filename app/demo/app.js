@@ -26,7 +26,7 @@ let routesData = null;
 let stopsData = null;
 
 const state = {
-  view: 'home',            // home | stop | bus | line | search | notices
+  view: 'home',            // home | stop | bus | menu | line | notices | sim | search
   stopId: null,
   homeStopId: EXAMPLE_STOP,
   me: null,
@@ -133,6 +133,18 @@ function addOverlays() {
 
 async function initMap() {
   try {
+    const box = $('#map');
+    if (!box.clientWidth || !box.clientHeight) {
+      await new Promise((resolve) => {
+        const wait = new ResizeObserver(() => {
+          if (box.clientWidth && box.clientHeight) {
+            wait.disconnect();
+            resolve();
+          }
+        });
+        wait.observe(box);
+      });
+    }
     remoteTiles = await fetch(TILES_CHECK, { signal: AbortSignal.timeout(3500) }).then((r) => r.ok).catch(() => false);
     map = new maplibregl.Map({
       container: 'map',
@@ -146,6 +158,7 @@ async function initMap() {
       minZoom: 10,
     });
     map.touchZoomRotate.disableRotation();
+    new ResizeObserver(() => map.resize()).observe(box);
     map.on('style.load', addOverlays);
     map.on('click', (e) => {
       if (!mapReady) return;
@@ -491,6 +504,24 @@ function searchHTML() {
     </div>`;
 }
 
+function menuHTML() {
+  const numbers = [...new Map(net.lines.map((l) => [l.number, l])).values()];
+  const c = clock();
+  const simText = c.live ? 'Ver los buses a otra hora' : `Ahora en simulación, ${formatMinutes(Math.floor(c.t))}`;
+  return `<div class="head">${BACK}<div><h1>Menú</h1></div></div>
+    <div class="rows"><h2>Líneas</h2>
+      <div class="line-grid">${numbers.map((l) => `<button type="button" data-act="line" data-number="${esc(l.number)}" style="--c:${l.color}" aria-label="Línea ${esc(l.number)}">${esc(l.number)}</button>`).join('')}</div>
+    </div>
+    <div class="rows">
+      <button type="button" class="row" data-act="notices"><span class="to">Avisos del servicio</span><span class="count">${NOTICES.length}</span></button>
+      <button type="button" class="row" data-act="sim"><span class="to">Simular otro momento<small>${esc(simText)}</small></span></button>
+    </div>${FOOT}`;
+}
+
+function simHTML() {
+  return `<div class="head">${BACK}<div><h1>Simular otro momento</h1><small>Elige hora, día y velocidad</small></div></div>`;
+}
+
 function noticesHTML() {
   return `<div class="head">${BACK}<div><h1>Avisos</h1></div></div>
     ${NOTICES.map((n) => `<div class="notice-item"><strong>${esc(n.title)}</strong>${esc(n.body)}<small><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.source)}</a></small></div>`).join('')}
@@ -499,7 +530,7 @@ function noticesHTML() {
 
 let lastHTML = '';
 function renderSheet() {
-  const html = { home: homeHTML, stop: stopHTML, bus: busHTML, line: lineHTML, search: searchHTML, notices: noticesHTML }[state.view]();
+  const html = { home: homeHTML, stop: stopHTML, bus: busHTML, menu: menuHTML, line: lineHTML, search: searchHTML, notices: noticesHTML, sim: simHTML }[state.view]();
   if (html !== lastHTML) {
     $('#sheet-body').innerHTML = html;
     lastHTML = html;
@@ -509,13 +540,13 @@ function renderSheet() {
 function renderClock() {
   const c = clock();
   const n = state.buses.filter((b) => !b.parkedUntil).length;
-  const count = `${n} bus${n === 1 ? '' : 'es'} en ruta`;
+  const count = `${n} bus${n === 1 ? '' : 'es'}`;
   const el = $('#clock');
   el.classList.toggle('sim', !c.live);
   const label = { laborable: 'laborable', sabado: 'sábado', domingo: 'domingo' }[c.kind];
   el.innerHTML = c.live
     ? `<i></i>${count} · ${formatMinutes(Math.floor(c.t))}`
-    : `<i></i>Simulación ×${sim.speed} · ${label} ${formatMinutes(Math.floor(c.t))} · ${n}`;
+    : `<i></i>Simulación · ${label} ${formatMinutes(Math.floor(c.t))}`;
   if (!$('#simpanel').hidden) syncSimPanel();
 }
 
@@ -549,7 +580,8 @@ function go(view) {
   state.view = view;
   document.body.dataset.view = view;
   if ($('#sheet').dataset.size === 'peek') $('#sheet').dataset.size = 'mid';
-  document.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed', String(view === 'line' && c.dataset.number === state.lineNumber)));
+  $('#simpanel').hidden = view !== 'sim';
+  if (view === 'sim') syncSimPanel();
   renderSheet();
   updateMarkers();
   updatePins();
@@ -592,10 +624,6 @@ function selectBus(key) {
 }
 
 function selectLine(number) {
-  if (state.view === 'line' && state.lineNumber === number) {
-    goHome();
-    return;
-  }
   state.lineNumber = number;
   go('line');
   const points = net.lines.filter((l) => l.number === number).flatMap((l) => l.dirs.flatMap((d) => d.path));
@@ -615,6 +643,11 @@ function goHome() {
 
 function goBack() {
   if (state.view === 'bus' && state.stopId) { go('stop'); focusHero(); return; }
+  if (['line', 'notices', 'sim'].includes(state.view)) {
+    go('menu');
+    if (map) requestAnimationFrame(() => map.fitBounds(CITY_BOUNDS, { padding: mapPadding(), duration: reduced ? 0 : 700 }));
+    return;
+  }
   goHome();
 }
 
@@ -648,6 +681,8 @@ function wire() {
     else if (act === 'stop') selectStop(t.dataset.id);
     else if (act === 'line') selectLine(t.dataset.number);
     else if (act === 'follow') selectBus(t.dataset.key);
+    else if (act === 'notices') go('notices');
+    else if (act === 'sim') go('sim');
     else if (act === 'soon') toast('Compartir la posición del bus aún no está en la demo.');
     else if (act === 'sim10') setSim({ base: 600, kind: 'laborable', speed: 1 });
     else if (act === 'arrival') {
@@ -685,22 +720,14 @@ function wire() {
   $('#q').addEventListener('keydown', (e) => {
     if (e.key === 'Escape') { e.target.value = ''; state.query = ''; goHome(); }
   });
-  $('#bell').addEventListener('click', () => go('notices'));
-  $('#notice').addEventListener('click', () => go('notices'));
+  $('#menu').addEventListener('click', () => {
+    if (state.view === 'menu') goHome();
+    else go('menu');
+  });
   $('#locate').addEventListener('click', locate);
   $('#zoom-in').addEventListener('click', () => map?.zoomIn());
   $('#zoom-out').addEventListener('click', () => map?.zoomOut());
-  $('#chips').addEventListener('click', (e) => {
-    const c = e.target.closest('.chip');
-    if (c) selectLine(c.dataset.number);
-  });
-
-  $('#clock').addEventListener('click', () => {
-    const panel = $('#simpanel');
-    panel.hidden = !panel.hidden;
-    $('#clock').setAttribute('aria-expanded', String(!panel.hidden));
-    syncSimPanel();
-  });
+  $('#clock').addEventListener('click', () => go('sim'));
   $('#sim-time').addEventListener('input', (e) => setSim({ base: Number(e.target.value) }));
   document.querySelectorAll('[data-day]').forEach((b) => b.addEventListener('click', () => setSim({ kind: b.dataset.day })));
   document.querySelectorAll('[data-speed]').forEach((b) => b.addEventListener('click', () => setSim({ speed: Number(b.dataset.speed) })));
@@ -740,14 +767,6 @@ function wire() {
   });
 }
 
-function buildChips() {
-  const seen = new Map();
-  for (const l of net.lines) if (!seen.has(l.number)) seen.set(l.number, l);
-  $('#chips').innerHTML = [...seen.values()]
-    .map((l) => `<button type="button" class="chip" data-number="${esc(l.number)}" aria-pressed="false" style="--c:${l.color}"><i></i>${esc(l.number)}</button>`)
-    .join('');
-}
-
 async function start() {
   net = prepare(await fetch('data/network.json').then((r) => r.json()));
   routesData = {
@@ -759,22 +778,21 @@ async function start() {
     features: net.stops.map((s) => ({ type: 'Feature', properties: { id: s.id }, geometry: { type: 'Point', coordinates: [s.lng, s.lat] } })),
   };
   document.body.dataset.view = state.view;
-  buildChips();
   wire();
   tickData();
   renderSheet();
   renderClock();
   syncSimPanel();
-  await initMap();
-  updatePins();
-  const initial = location.hash.slice(1);
-  if (net.stopById.has(initial)) selectStop(initial);
   setInterval(() => {
     if (!map) tickData();
     renderSheet();
     renderClock();
     checkAlert();
   }, 1000);
+  await initMap();
+  updatePins();
+  const initial = location.hash.slice(1);
+  if (net.stopById.has(initial)) selectStop(initial);
 }
 
 start().catch((err) => {
