@@ -36,7 +36,7 @@ const ROUTES = {
   13: { route: 'Rda. Muralla (Sindicatos) – As Gándaras' },
 };
 const routeOf = (line) => ROUTES[line.number]?.route ?? line.name;
-const nice = (name) => String(name).replace(/^HULA\b.*$/i, 'Hospital (HULA)');
+const nice = (name) => String(name).replace(/^HULA \(Ent\. Personal\).*$/i, 'Hospital (entrada de personal)').replace(/^HULA\b.*$/i, 'Hospital (HULA)');
 const hasWorks = (number) => NOTICES.some((n) => n.lines.includes(number));
 const shortDays = (days) => (/lunes a viernes/i.test(days) ? 'Lunes a viernes' : (/todos/i.test(days) ? 'Todos los días' : days));
 
@@ -67,7 +67,9 @@ const state = {
   busFromLine: false,
   stopFromLine: false,
   query: '',
-  alert: null,
+  alerts: [],
+  bellFor: null,
+  showStops: false,
   buses: [],
   busByKey: new Map(),
   previous: 'home',
@@ -252,7 +254,8 @@ function mapPadding() {
   const side = desktop.matches ? 408 : 0;
   const top = desktop.matches ? 70 : 130;
   const lead = state.view === 'line' || state.view === 'bus' ? 40 : 0; // el bus resaltado es más grande
-  return { top: top + lead, bottom: sheet + 30 + lead, left: side + 40 + lead, right: (state.view === 'stop' ? 120 : 40) + lead };
+  const tag = state.view === 'stop' ? 70 : 0; // deja sitio al nombre de la parada
+  return { top: top + lead + tag, bottom: sheet + 30 + lead, left: side + 40 + lead + tag, right: 40 + lead + tag };
 }
 
 function moveTo(points, maxZoom = 15.6, duration = 700) {
@@ -269,7 +272,7 @@ const asLine = (coords, properties = {}) => ({ type: 'Feature', properties, geom
 function applyMapFocus() {
   if (!mapReady) return;
   const alone = state.view === 'line' || state.view === 'bus';
-  map.setPaintProperty('routes', 'line-opacity', alone ? 0 : (state.view === 'stop' ? 0.12 : (isDark() ? 0.42 : 0.34)));
+  map.setPaintProperty('routes', 'line-opacity', alone || state.view === 'stop' ? 0 : (isDark() ? 0.42 : 0.34));
   let ids = null;
   if (state.view === 'line') ids = net.lines.filter((l) => l.number === state.lineNumber).flatMap((l) => l.dirs.flatMap((d) => d.stops));
   if (state.view === 'bus') ids = state.busByKey.get(state.busKey)?.dir.stops ?? null;
@@ -347,7 +350,7 @@ function updateMarkers() {
     }
     const inLine = state.view === 'line' && bus.line.number === state.lineNumber;
     const isHero = bus.key === hero || (inLine && !bus.parkedUntil);
-    const filtered = (state.view === 'line' && !inLine) || (state.view === 'bus' && bus.key !== state.busKey);
+    const filtered = (state.view === 'line' && !inLine) || (state.view === 'bus' && bus.key !== state.busKey) || (state.view === 'stop' && !isHero);
     const dimmed = Boolean(hero) && !isHero;
     const parked = Boolean(bus.parkedUntil);
     const look = `${isHero}|${filtered}|${dimmed}|${parked}`;
@@ -496,12 +499,59 @@ const BACK = '<button type="button" class="back" data-act="back" ><svg width="20
 const FOOT = '<p class="foot">Hora y posición aproximadas según el horario. Web no oficial.</p>';
 const MAP_CREDIT = 'Mapa: OpenFreeMap © OpenMapTiles. Datos © OpenStreetMap.';
 
-function arrivalRow(a, selected) {
-  return `<button type="button" class="row${selected ? ' sel' : ''}" data-act="arrival" data-key="${esc(a.key)}" data-stop="${esc(a.stopId)}">
-    <span class="badge" style="--c:${a.line.color}">${esc(a.line.number)}</span>
-    <span class="to">${esc(nice(a.dir.dest))}<small>a las ${a.time}</small></span>
-    <span class="eta">${minutesHTML(a.eta)}</span>
-  </button>`;
+const BELL = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>';
+const ALERT_OPTIONS = [2, 5, 10];
+
+function bellButton(a) {
+  const armed = state.alerts.find((x) => x.key === a.key && x.stopId === a.stopId);
+  const left = a.minutes - clock().t;
+  if (!armed && left <= ALERT_OPTIONS[0]) return '';
+  const label = armed ? `Aviso ${armed.before} minutos antes. Cambiar` : 'Avisarme antes de que llegue';
+  return `<button type="button" class="bell${armed ? ' on' : ''}" data-act="bell" data-key="${esc(a.key)}" data-stop="${esc(a.stopId)}" aria-label="${label}" aria-expanded="${state.bellFor === a.key}">${BELL}${armed ? `<span>${armed.before} min</span>` : ''}</button>`;
+}
+
+function bellChooser(a) {
+  if (state.bellFor !== a.key) return '';
+  const armed = state.alerts.find((x) => x.key === a.key && x.stopId === a.stopId);
+  const left = a.minutes - clock().t;
+  const options = ALERT_OPTIONS.filter((n) => left > n);
+  return `<div class="bell-opts"><p>¿Cuánto antes te avisamos?</p><div class="bell-row">
+    ${options.map((n) => `<button type="button" data-act="bell-set" data-key="${esc(a.key)}" data-stop="${esc(a.stopId)}" data-before="${n}" aria-pressed="${armed?.before === n}">${n} min</button>`).join('')}
+    ${armed ? `<button type="button" class="off" data-act="bell-off" data-key="${esc(a.key)}" data-stop="${esc(a.stopId)}">Quitar</button>` : ''}
+  </div><small>Deja esta pantalla abierta para recibir el aviso.</small></div>`;
+}
+
+function arrivalRow(a) {
+  return `<div class="row arr">
+    <button type="button" class="row-main" data-act="arrival" data-key="${esc(a.key)}" data-stop="${esc(a.stopId)}">
+      <span class="badge" style="--c:${a.line.color}">${esc(a.line.number)}</span>
+      <span class="to">${esc(nice(a.dir.dest))}<small>a las ${a.time}</small></span>
+      <span class="eta">${minutesHTML(a.eta)}</span>
+    </button>${bellButton(a)}
+  </div>${bellChooser(a)}`;
+}
+
+/** Dónde está el bus ahora, dicho con las paradas que tiene más cerca. */
+function whereNow(bus) {
+  const stops = bus.dir.stops;
+  const next = net.stopById.get(stops[bus.nextStopIndex]);
+  const nextName = nice(next?.name ?? '');
+  if (bus.parkedUntil) return { label: 'Parado en', place: nextName, phase: 'parked' };
+  if (bus.stopped) return { label: 'Ahora en la parada', place: nextName, phase: 'at' };
+  const prev = net.stopById.get(stops[Math.max(0, bus.nextStopIndex - 1)]);
+  const toPrev = distanceMetres(bus.lat, bus.lng, prev.lat, prev.lng);
+  const toNext = distanceMetres(bus.lat, bus.lng, next.lat, next.lng);
+  const part = toPrev / Math.max(1, toPrev + toNext);
+  if (part < 0.35) return { label: 'Acaba de salir de', place: nice(prev.name), phase: 'left' };
+  if (part > 0.65) return { label: 'Llegando a', place: nextName, phase: 'arriving' };
+  return { label: 'Va entre', place: `${nice(prev.name)} y ${nextName}`, phase: 'between' };
+}
+
+function nowCard(label, place, detail, key) {
+  const inner = `<span class="now-text"><span class="now-label">${esc(label)}</span><strong>${esc(place)}</strong>${detail ? `<small>${esc(detail)}</small>` : ''}</span>`;
+  return key
+    ? `<button type="button" class="now" data-act="follow" data-key="${esc(key)}" aria-label="${esc(`${label} ${place}. Ver recorrido`)}">${inner}<span class="now-go" aria-hidden="true">›</span></button>`
+    : `<div class="now">${inner}</div>`;
 }
 
 function arrivalsFor(stopId) {
@@ -531,20 +581,10 @@ function homeHTML() {
   const list = arrivalsFor(stop.id).slice(0, 3);
   const where = state.me ? `Tu parada más cercana, a ${Math.round(distanceMetres(state.me.lat, state.me.lng, stop.lat, stop.lng) / 10) * 10} m` : 'Tu parada';
   const rows = list.length
-    ? `<div class="rows">${list.map((a) => arrivalRow(a, false)).join('')}</div>`
+    ? `<div class="rows">${list.map((a) => arrivalRow(a)).join('')}</div>`
     : '<p class="empty">No pasa ningún bus por aquí en las próximas dos horas.</p>';
   return `<div class="head"><div><h1>${esc(nice(stop.name))}</h1><small>${esc(where)}</small></div></div>${rows}${wake}
     <button type="button" class="cta second" data-act="menu">Ver todas las líneas</button>`;
-}
-
-function stepsHTML(bus, a) {
-  const left = Math.max(0, a.stopIndex - bus.nextStopIndex);
-  const dots = Math.min(left, 6);
-  let track = `<i class="from" style="--c:${a.line.color}"></i><b></b>`;
-  for (let i = 0; i < dots; i++) track += '<i></i><b></b>';
-  track += '<i class="to"></i>';
-  const label = left === 0 ? 'Tu parada es la siguiente' : left === 1 ? 'Falta 1 parada' : `Faltan ${left} paradas`;
-  return `<div class="steps"><div class="track" aria-hidden="true">${track}</div><span>${label}</span></div>`;
 }
 
 function stopHTML() {
@@ -555,26 +595,33 @@ function stopHTML() {
   const head = `<div class="head">${BACK}<div><h1>${esc(nice(stop.name))}</h1><small>${sub}</small></div></div>`;
   if (!hero) return `${head}<p class="empty">No pasa ningún bus por aquí en las próximas dos horas.</p>${FOOT}`;
   const bus = state.busByKey.get(hero.key);
-  const label = hero.eta === 0 ? 'El próximo bus' : (bus ? 'El próximo bus llega en' : 'Sale del inicio de la línea en');
   const big = hero.eta === 0 ? 'Ya llega' : `${hero.eta} min`;
-  const armed = state.alert?.key === hero.key;
-  const canAlert = hero.minutes - clock().t > 2;
+  let card;
+  if (bus) {
+    const left = Math.max(0, hero.stopIndex - bus.nextStopIndex);
+    const where = whereNow(bus);
+    let detail;
+    if (left === 0) detail = where.phase === 'at' ? 'Está en esta parada' : 'Esta parada es la siguiente';
+    else detail = left === 1 ? 'Le falta 1 parada para llegar aquí' : `Le faltan ${left} paradas para llegar aquí`;
+    card = nowCard(where.label, where.place, detail, hero.key);
+  } else {
+    const svc = hero.dir.svc[clock().kind];
+    card = nowCard('Todavía no ha salido', nice(hero.dir.origin), `Sale a las ${formatMinutes(svc.dep[hero.run] + svc.off[0])}`);
+  }
   const later = list.filter((a) => a.key !== hero.key).slice(0, 5);
   return `${head}
     <div class="stop-grid">
       <div class="hero">
-        <div class="hero-top">
-          <div><p>${label}</p><div class="bignum">${big}</div></div>
-          <div class="hero-side"><span class="badge big" style="--c:${hero.line.color}">${esc(hero.line.number)}</span><span>a las ${hero.time}</span></div>
+        <div class="hero-line">
+          <span class="badge big" style="--c:${hero.line.color}">${esc(hero.line.number)}</span>
+          <p class="hacia">Hacia <strong>${esc(nice(hero.dir.dest))}</strong></p>
+          ${bellButton(hero)}
         </div>
-        <p class="hacia">Hacia <strong>${esc(nice(hero.dir.dest))}</strong></p>
-        ${bus ? stepsHTML(bus, hero) : ''}
-        <div class="buttons">
-          ${canAlert ? `<button type="button" class="cta${armed ? ' on' : ''}" data-act="alert" data-key="${esc(hero.key)}">${armed ? 'Aviso activado · Quitar' : 'Avísame 2 min antes'}</button>` : ''}
-          ${bus ? `<button type="button" class="cta second" data-act="follow" data-key="${esc(hero.key)}">Ver por dónde va</button>` : ''}
-        </div>
+        ${bellChooser(hero)}
+        <div class="hero-time"><span class="bignum">${big}</span><span>a las ${hero.time}</span></div>
+        ${card}
       </div>
-      <div class="rows"><h2>Los siguientes</h2>${later.length ? later.map((a) => arrivalRow(a, false)).join('') : '<p class="empty">No hay más buses en las próximas dos horas.</p>'}</div>
+      <div class="rows"><h2>Después pasan</h2>${later.length ? later.map((a) => arrivalRow(a)).join('') : '<p class="empty">No hay más buses en las próximas dos horas.</p>'}</div>
     </div>${FOOT}`;
 }
 
@@ -595,7 +642,8 @@ function busHTML() {
   const end = bus.dir.stops.length - 1;
   const targetTime = passTime(svc, bus.run, toMine ? mine : end);
   const eta = Math.max(0, Math.round(targetTime - c.t));
-  const title = toMine ? (eta === 0 ? 'Llegando a tu parada' : `A ${eta} min de tu parada`) : (eta === 0 ? 'Llegando al final' : `A ${eta} min del final`);
+  const arrives = toMine ? (eta === 0 ? 'Ya llega a tu parada' : `Llega a tu parada en ${eta} min`) : (eta === 0 ? 'Llegando al final del recorrido' : `Llega al final en ${eta} min`);
+  const where = whereNow(bus);
   const from = Math.max(0, bus.nextStopIndex - 1);
   const rows = bus.dir.stops.slice(from).map((id, offset) => {
     const i = from + offset;
@@ -604,7 +652,8 @@ function busHTML() {
     return `<li class="${cls}"><time>${formatMinutes(passTime(svc, bus.run, i))}</time><span class="rail"></span><span>${esc(nice(name))}${i === mine ? ' · Tu parada' : ''}</span></li>`;
   }).join('');
   return `<div class="head">${BACK}<span class="badge" style="--c:${bus.line.color}">${esc(bus.line.number)}</span><div><small>Hacia ${esc(nice(bus.dir.dest))}</small></div></div>
-    <p class="big-line">${title}</p>
+    ${nowCard(where.label, where.place, arrives)}
+    <div class="rows"><h2>Su recorrido</h2></div>
     <ol class="tl">${rows}</ol>${FOOT}`;
 }
 
@@ -628,20 +677,19 @@ function nextDepartureOf(number, kind, t) {
   return best;
 }
 
-function busRow(bus, kind) {
-  const svc = bus.dir.svc[kind];
+function busCard(bus, kind) {
   const stops = bus.dir.stops;
-  if (bus.parkedUntil) {
-    const end = net.stopById.get(stops[stops.length - 1]);
-    return `<div class="row"><span class="to"><strong>Parado en ${esc(nice(end?.name ?? ''))}</strong><small>Vuelve a salir a las ${formatMinutes(bus.parkedUntil)}</small></span></div>`;
-  }
+  const where = whereNow(bus);
+  if (bus.parkedUntil) return nowCard(where.label, where.place, `Vuelve a salir a las ${formatMinutes(bus.parkedUntil)}`);
+  const svc = bus.dir.svc[kind];
   const next = net.stopById.get(stops[bus.nextStopIndex]);
-  const arrival = formatMinutes(passTime(svc, bus.run, stops.length - 1));
-  const where = bus.stopped ? `Parado en ${nice(next?.name ?? '')}` : `Próxima parada: ${nice(next?.name ?? '')}`;
-  return `<button type="button" class="row" data-act="follow" data-key="${esc(bus.key)}">
-    <span class="to"><strong>Hacia ${esc(nice(bus.dir.dest))}</strong><small>${esc(where)}<br>Llega al final a las ${arrival}</small></span>
-    <span class="more" aria-hidden="true">›</span>
-  </button>`;
+  const inMin = Math.max(0, Math.round(passTime(svc, bus.run, bus.nextStopIndex) - clock().t));
+  const after = net.stopById.get(stops[Math.min(bus.nextStopIndex + 1, stops.length - 1)]);
+  const atOrArriving = where.phase === 'at' || where.phase === 'arriving';
+  const nextText = atOrArriving
+    ? (bus.nextStopIndex < stops.length - 1 ? `Después va a ${nice(after?.name ?? '')}` : 'Es el final del recorrido')
+    : `Siguiente parada: ${nice(next?.name ?? '')}${inMin ? `, en ${inMin} min` : ''}`;
+  return `<p class="card-title">Hacia ${esc(nice(bus.dir.dest))}</p>${nowCard(where.label, where.place, nextText, bus.key)}`;
 }
 
 function lineHTML() {
@@ -649,32 +697,34 @@ function lineHTML() {
   const line = group[0];
   const c = clock();
   const mine = state.buses.filter((b) => b.line.number === state.lineNumber);
-  const moving = mine.filter((b) => !b.parkedUntil).length;
-  const stateText = moving === 0 ? 'Ahora mismo no hay ningún bus en marcha' : (moving === 1 ? 'Hay 1 bus en marcha' : `Hay ${moving} buses en marcha`);
-  let statusRows = mine.map((b) => busRow(b, c.kind)).join('');
+  const title = mine.length > 1 ? `Dónde están ahora sus ${mine.length} buses` : 'Dónde está ahora';
+  let status = mine.map((b) => busCard(b, c.kind)).join('');
   if (!mine.length) {
     const next = nextDepartureOf(state.lineNumber, c.kind, c.t);
-    statusRows = `<p class="empty">${next === null ? 'Hoy ya no hay más salidas de esta línea.' : `La próxima salida es a las ${formatMinutes(next)}.`}</p>`;
+    status = `<div class="now"><span class="now-text"><span class="now-label">Ahora mismo</span><strong>No hay ningún bus en la calle</strong><small>${next === null ? 'Hoy ya no hay más salidas de esta línea' : `El próximo sale a las ${formatMinutes(next)}`}</small></span></div>`;
   }
-  const dirs = lineDirections();
-  const index = Math.min(state.lineDir, dirs.length - 1);
-  const current = dirs[index];
-  const hours = [...new Set(group.map((l) => [shortDays(l.days), /consultar/i.test(l.frequency) ? '' : l.frequency, `de ${l.first} a ${l.last}`].filter(Boolean).join(' · ')))];
   const notice = hasWorks(state.lineNumber) ? `<div class="notice-item"><strong>Cambios por obras</strong>${esc(NOTICES[0].body)}</div>` : '';
-  const dests = dirs.map((d) => d.dir.dest);
-  const dirLabel = (d) => (dests.filter((x) => x === d.dir.dest).length > 1 ? `De ${nice(d.dir.origin)} a ${nice(d.dir.dest)}` : `Hacia ${nice(d.dir.dest)}`);
-  const buttons = dirs.map((d, i) => `<button type="button" data-act="line-dir" data-index="${i}" aria-pressed="${i === index}">${esc(dirLabel(d))}</button>`).join('');
-  const stops = current.dir.stops.map((id) => {
-    const stop = net.stopById.get(id);
-    return `<button type="button" class="row" data-act="stop" data-id="${esc(id)}"><span class="to">${esc(nice(stop?.name ?? id))}</span></button>`;
-  }).join('');
+  const toggle = `<button type="button" class="cta second" data-act="toggle-stops" aria-expanded="${state.showStops}">${state.showStops ? 'Ocultar paradas y horario' : 'Ver paradas y horario'}</button>`;
+  let details = '';
+  if (state.showStops) {
+    const dirs = lineDirections();
+    const index = Math.min(state.lineDir, dirs.length - 1);
+    const current = dirs[index];
+    const hours = [...new Set(group.map((l) => [shortDays(l.days), /consultar/i.test(l.frequency) ? '' : l.frequency, `de ${l.first} a ${l.last}`].filter(Boolean).join(' · ')))];
+    const dests = dirs.map((d) => d.dir.dest);
+    const dirLabel = (d) => (dests.filter((x) => x === d.dir.dest).length > 1 ? `De ${nice(d.dir.origin)} a ${nice(d.dir.dest)}` : `Hacia ${nice(d.dir.dest)}`);
+    const buttons = dirs.map((d, i) => `<button type="button" data-act="line-dir" data-index="${i}" aria-pressed="${i === index}">${esc(dirLabel(d))}</button>`).join('');
+    const stops = current.dir.stops.map((id) => {
+      const stop = net.stopById.get(id);
+      return `<button type="button" class="row" data-act="stop" data-id="${esc(id)}"><span class="to">${esc(nice(stop?.name ?? id))}</span></button>`;
+    }).join('');
+    details = `<p class="hours">${hours.map(esc).join('<br>')}</p>
+      <div class="dirs" role="group" aria-label="Sentido">${buttons}</div>
+      <div class="rows"><h2>${current.dir.stops.length} paradas</h2>${stops}</div>`;
+  }
   return `<div class="head">${BACK}<span class="badge big" style="--c:${line.color}">${esc(line.number)}</span><div><h1 class="route">${esc(routeOf(line))}</h1></div></div>
-    <div class="rows"><h2>${stateText}</h2>${statusRows}</div>
-    ${notice}
-    <p class="hours">${hours.map(esc).join('<br>')}</p>
-    <div class="rows"><h2>Paradas (${current.dir.stops.length})</h2></div>
-    <div class="dirs" role="group" aria-label="Sentido">${buttons}</div>
-    <div class="rows">${stops}</div>${FOOT}`;
+    <div class="rows"><h2>${esc(title)}</h2></div>
+    ${status}${notice}${toggle}${details}${FOOT}`;
 }
 
 function searchHTML() {
@@ -743,18 +793,20 @@ function renderClock() {
 }
 
 function checkAlert() {
-  if (!state.alert) return;
+  if (!state.alerts.length) return;
   const c = clock();
-  const { key, stopId, name, number } = state.alert;
-  const a = arrivalsFor(stopId).find((x) => x.key === key);
-  if (a && a.minutes - c.t > 2) return;
-  state.alert = null;
-  const text = `La línea ${number} llega a ${name} en menos de 2 minutos`;
-  toast(text);
-  try {
-    if (navigator.vibrate) navigator.vibrate(200);
-    if ('Notification' in window && Notification.permission === 'granted') new Notification('Xa Vén', { body: text });
-  } catch { /* el aviso en pantalla ya está dado */ }
+  state.alerts = state.alerts.filter((alert) => {
+    const a = arrivalsFor(alert.stopId).find((x) => x.key === alert.key);
+    if (!a) return false;
+    if (a.minutes - c.t > alert.before) return true;
+    const text = `La línea ${alert.number} llega a ${nice(alert.name)} en unos ${alert.before} min`;
+    toast(text);
+    try {
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      if ('Notification' in window && Notification.permission === 'granted') new Notification('Xa Vén', { body: text, icon: 'icon-192.png' });
+    } catch { /* el aviso en pantalla ya está dado */ }
+    return false;
+  });
 }
 
 let toastTimer = 0;
@@ -770,6 +822,7 @@ function toast(text) {
 function go(view) {
   if (view !== state.view && state.view !== 'search' && state.view !== 'notices') state.previous = state.view;
   state.view = view;
+  state.bellFor = null;
   document.body.dataset.view = view;
   $('#sheet').dataset.size = view === 'menu' || view === 'search' ? 'tall' : 'mid';
   $('#simpanel').hidden = view !== 'sim';
@@ -824,6 +877,7 @@ function selectBus(key) {
 function selectLine(number) {
   state.lineNumber = number;
   state.lineDir = 0;
+  state.showStops = false;
   state.stopId = null;
   state.follow = true;
   go('line');
@@ -917,20 +971,30 @@ function wire() {
         updateApproach();
         focusHero();
       }
-    } else if (act === 'alert') {
-      if (state.alert?.key === t.dataset.key) {
-        state.alert = null;
-        renderSheet();
-        return;
-      }
-      const stop = net.stopById.get(state.stopId);
-      const line = net.lineById.get(t.dataset.key.split('|')[0]);
-      state.alert = { key: t.dataset.key, stopId: stop.id, name: stop.name, number: line.number };
+    } else if (act === 'bell') {
+      state.bellFor = state.bellFor === t.dataset.key ? null : t.dataset.key;
       renderSheet();
-      toast('Te avisaremos en esta pantalla. Déjala abierta.');
+    } else if (act === 'bell-set') {
+      const { key, stop: stopId } = t.dataset;
+      const stop = net.stopById.get(stopId);
+      const line = net.lineById.get(key.split('|')[0]);
+      const before = Number(t.dataset.before);
+      state.alerts = state.alerts.filter((x) => !(x.key === key && x.stopId === stopId));
+      state.alerts.push({ key, stopId, name: stop.name, number: line.number, before });
+      state.bellFor = null;
+      renderSheet();
+      toast(`Te avisaremos ${before} minutos antes de que llegue`);
       try {
         if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
       } catch { /* sin permiso, queda el aviso en pantalla */ }
+    } else if (act === 'bell-off') {
+      state.alerts = state.alerts.filter((x) => !(x.key === t.dataset.key && x.stopId === t.dataset.stop));
+      state.bellFor = null;
+      renderSheet();
+      toast('Aviso quitado');
+    } else if (act === 'toggle-stops') {
+      state.showStops = !state.showStops;
+      renderSheet();
     }
   });
 
