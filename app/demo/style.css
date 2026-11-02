@@ -69,14 +69,15 @@ h1, h2, p { margin: 0; }
 .ghost { height: 44px; border: 1px solid var(--rule); border-radius: 12px; background: transparent; font-weight: 700; }
 
 body:not([data-located]) #locate { display: none; }
-#credit { position: fixed; z-index: 2; right: var(--gutter-r); bottom: calc(var(--sheet-h) + 10px); width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--mute); font-size: 13px; font-weight: 700; line-height: 22px; transition: bottom .2s ease; }
-#locate { position: fixed; z-index: 2; right: var(--gutter-r); bottom: calc(var(--sheet-h) + 44px); color: var(--me); width: 44px; height: 44px; transition: bottom .2s ease; }
+#credit { position: fixed; z-index: 2; right: var(--gutter-r); bottom: calc(var(--sheet-h) + 10px); width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: color-mix(in srgb, var(--surface) 70%, transparent); color: var(--mute); font-size: 13px; font-weight: 700; line-height: 22px; }
+#locate { position: fixed; z-index: 2; right: var(--gutter-r); bottom: calc(var(--sheet-h) + 44px); color: var(--me); width: 44px; height: 44px; }
 .zoom { display: none; }
 
 /* Panel inferior */
-#sheet { position: fixed; z-index: 4; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; max-height: 62dvh; padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--surface); border-radius: 22px 22px 0 0; box-shadow: 0 -6px 24px var(--shadow); transition: max-height .22s ease; }
+#sheet { position: fixed; z-index: 4; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; max-height: 62dvh; padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--surface); border-radius: 22px 22px 0 0; box-shadow: 0 -6px 24px var(--shadow); }
 #sheet[data-size="peek"] { max-height: 112px; }
-#sheet.dragging { transition: none; user-select: none; -webkit-user-select: none; }
+#sheet.dragging { will-change: transform; user-select: none; -webkit-user-select: none; }
+#sheet.settling { will-change: transform; transition: transform .22s cubic-bezier(.22, .8, .3, 1); }
 #sheet[data-size="tall"] { max-height: 88dvh; }
 #grab { flex: none; display: grid; place-items: center; width: 100%; height: 32px; cursor: grab; padding: 0; border: 0; background: transparent; touch-action: none; }
 #grab span { width: 40px; height: 4px; border-radius: 2px; background: var(--grab); }
@@ -149,6 +150,7 @@ body:not([data-located]) #locate { display: none; }
 .tl li.you .rail::after { left: -1px; top: 1px; width: 18px; height: 18px; border-width: 5px; }
 
 /* Marcadores */
+.maplibregl-marker { will-change: transform; }
 .bus { position: relative; display: block; min-width: 28px; height: 28px; padding: 0 5px; border: 2px solid #FFFFFF; border-radius: 15px; background: var(--c); color: #FFFFFF; font-size: 13px; font-weight: 700; line-height: 24px; box-shadow: 0 1px 5px rgba(18, 20, 22, .3); transition: opacity .2s ease; }
 .bus .arrow { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; transform: rotate(var(--r)); pointer-events: none; }
 .bus .arrow::before { content: ""; position: absolute; left: 50%; top: 0; margin-left: -5px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 7px solid var(--c); }
@@ -159,7 +161,7 @@ body:not([data-located]) #locate { display: none; }
 .bus svg { display: none; }
 .bus.lead { min-width: 0; width: 34px; height: 62px; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
 .bus.lead .arrow { display: none; }
-.bus.lead svg { display: block; transform: rotate(var(--r)); filter: drop-shadow(0 3px 6px rgba(18, 20, 22, .4)); }
+.bus.lead svg { display: block; transform: rotate(var(--r)); }
 .bus.lead .num { position: absolute; left: 40px; top: 16px; min-width: 30px; height: 28px; padding: 0 8px; border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 15px; line-height: 28px; text-align: center; box-shadow: 0 2px 8px rgba(18, 20, 22, .25); }
 
 .pin { width: 18px; height: 18px; border: 5px solid var(--ink); border-radius: 50%; background: var(--surface); }

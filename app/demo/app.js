@@ -162,6 +162,7 @@ async function buildStyle() {
 }
 
 function addOverlays() {
+  shownFocus = null;
   const empty = { type: 'FeatureCollection', features: [] };
   map.addSource('routes', { type: 'geojson', data: routesData });
   map.addSource('bus-stops', { type: 'geojson', data: stopsData });
@@ -192,13 +193,18 @@ async function initMap() {
         wait.observe(box);
       });
     }
-    remoteTiles = await fetch(TILES_CHECK, { signal: AbortSignal.timeout(3500) }).then((r) => r.ok).catch(() => false);
+    remoteTiles = await fetch(TILES_CHECK, { signal: AbortSignal.timeout(2000) }).then((r) => r.ok).catch(() => false);
     map = new maplibregl.Map({
       container: 'map',
       style: await buildStyle(),
       bounds: CITY_BOUNDS,
       fitBoundsOptions: { padding: mapPadding() },
       attributionControl: false,
+      pixelRatio: Math.min(window.devicePixelRatio || 1, 2),
+      fadeDuration: 80,
+      renderWorldCopies: false,
+      refreshExpiredTiles: false,
+      validateStyle: false,
       dragRotate: false,
       pitchWithRotate: false,
       maxZoom: 18,
@@ -276,8 +282,8 @@ function busMarker(bus) {
   el.innerHTML = `${BUS_SVG}<span class="arrow"></span><span class="num">${esc(bus.line.number)}</span>`;
   el.addEventListener('click', (e) => { e.stopPropagation(); selectBus(bus.key); });
   wrap.append(el);
-  const marker = new maplibregl.Marker({ element: wrap }).setLngLat([bus.lng, bus.lat]).addTo(map);
-  return { marker, el, x: 0, y: 0, tx: 0, ty: 0 };
+  const marker = new maplibregl.Marker({ element: wrap, subpixelPositioning: true }).setLngLat([bus.lng, bus.lat]).addTo(map);
+  return { marker, el, x: 0, y: 0, tx: 0, ty: 0, shownX: 0, shownY: 0, lng: bus.lng, lat: bus.lat, r: null, look: '' };
 }
 
 function heroBusKey() {
@@ -321,16 +327,29 @@ function updateMarkers() {
       m = busMarker(bus);
       markers.set(bus.key, m);
     }
-    m.marker.setLngLat([bus.lng, bus.lat]);
-    m.el.style.setProperty('--r', `${bus.bearing}deg`);
+    if (Math.abs(m.lng - bus.lng) > 1e-6 || Math.abs(m.lat - bus.lat) > 1e-6) {
+      m.lng = bus.lng;
+      m.lat = bus.lat;
+      m.marker.setLngLat([bus.lng, bus.lat]);
+    }
+    if (m.r !== bus.bearing) {
+      m.r = bus.bearing;
+      m.el.style.setProperty('--r', `${bus.bearing}deg`);
+    }
     const inLine = state.view === 'line' && bus.line.number === state.lineNumber;
     const isHero = bus.key === hero || (inLine && !bus.parkedUntil);
     const filtered = (state.view === 'line' && !inLine) || (state.view === 'bus' && bus.key !== state.busKey);
-    m.el.classList.toggle('lead', isHero);
-    m.el.classList.toggle('gone', filtered);
-    m.el.classList.toggle('dim', Boolean(hero) && !isHero);
-    m.el.classList.toggle('parked', Boolean(bus.parkedUntil));
-    m.marker.getElement().style.zIndex = isHero ? '5' : '1';
+    const dimmed = Boolean(hero) && !isHero;
+    const parked = Boolean(bus.parkedUntil);
+    const look = `${isHero}|${filtered}|${dimmed}|${parked}`;
+    if (m.look !== look) {
+      m.look = look;
+      m.el.classList.toggle('lead', isHero);
+      m.el.classList.toggle('gone', filtered);
+      m.el.classList.toggle('dim', dimmed);
+      m.el.classList.toggle('parked', parked);
+      m.marker.getElement().style.zIndex = isHero ? '5' : '1';
+    }
   }
   for (const [key, m] of markers) {
     if (!seen.has(key)) {
@@ -378,17 +397,23 @@ let lastBusTick = 0;
 let lastClutter = 0;
 function tickMarkers(now = 0) {
   requestAnimationFrame(tickMarkers);
-  if (now - lastBusTick < 120) return;
+  const fast = sim.on && sim.speed > 1;
+  if (now - lastBusTick < (fast ? 66 : 200)) return;
+  if (!fast && map?.isMoving()) return;
   lastBusTick = now;
   tickData();
-  if (now - lastClutter > 350) {
+  if (now - lastClutter > 500 && !map?.isMoving()) {
     lastClutter = now;
     declutter();
   }
   for (const m of markers.values()) {
     m.x += (m.tx - m.x) * 0.35;
     m.y += (m.ty - m.y) * 0.35;
-    m.marker.setOffset([Math.round(m.x * 10) / 10, Math.round(m.y * 10) / 10]);
+    if (Math.abs(m.x - m.shownX) > 0.3 || Math.abs(m.y - m.shownY) > 0.3) {
+      m.shownX = m.x;
+      m.shownY = m.y;
+      m.marker.setOffset([m.x, m.y]);
+    }
   }
 }
 
@@ -397,7 +422,6 @@ function tickData() {
   state.buses = busesAt(net, c.kind, c.t);
   state.busByKey = new Map(state.buses.map((b) => [b.key, b]));
   updateMarkers();
-  updateApproach();
 }
 
 let stopPin = null;
@@ -427,6 +451,7 @@ function updatePins() {
   }
 }
 
+let shownFocus = null;
 function updateApproach() {
   if (!mapReady) return;
   const empty = { type: 'FeatureCollection', features: [] };
@@ -436,11 +461,17 @@ function updateApproach() {
   const approachSrc = map.getSource('approach');
   if (!focusSrc || !approachSrc) return;
   if (!bus) {
-    focusSrc.setData(empty);
-    approachSrc.setData(empty);
+    if (shownFocus) {
+      shownFocus = null;
+      focusSrc.setData(empty);
+      approachSrc.setData(empty);
+    }
     return;
   }
-  focusSrc.setData(asLine(bus.dir.path, { color: bus.line.color }));
+  if (shownFocus !== bus.dir) {
+    shownFocus = bus.dir;
+    focusSrc.setData(asLine(bus.dir.path, { color: bus.line.color }));
+  }
   let target = bus.dir.stops.length - 1;
   if (state.stopId) {
     const i = bus.dir.stops.indexOf(state.stopId);
@@ -744,7 +775,11 @@ function go(view) {
   updatePins();
   applyMapFocus();
   updateApproach();
-  $('#sheet-body').scrollTop = 0;
+  const body = $('#sheet-body');
+  body.scrollTop = 0;
+  if (!reduced && body.animate) {
+    body.animate([{ opacity: 0, transform: 'translateY(8px)' }, { opacity: 1, transform: 'none' }], { duration: 160, easing: 'ease-out' });
+  }
 }
 
 function selectStop(id, keepArrival = false) {
@@ -932,26 +967,45 @@ function wire() {
     renderClock();
   });
 
-  // Panel inferior: se arrastra con el dedo desde el asa o el título y se queda en tres alturas.
+  // Panel inferior: se arrastra desde el asa o el título y se queda en tres alturas.
+  // Durante el gesto solo cambia `transform`, que no obliga a recalcular la página.
   const sheet = $('#sheet');
   const SIZES = ['peek', 'mid', 'tall'];
   let drag = null;
-  const heightFor = (size) => {
-    const saved = sheet.dataset.size;
-    const inline = sheet.style.height;
-    const maxInline = sheet.style.maxHeight;
+  let settling = 0;
+  let sheetVarTimer = 0;
+  const syncSheetVar = () => {
+    if (desktop.matches) {
+      document.documentElement.style.removeProperty('--sheet-h');
+      return;
+    }
+    if (drag?.moved || settling) return;
+    const h = `${Math.round(sheet.getBoundingClientRect().height)}px`;
+    if (document.documentElement.style.getPropertyValue('--sheet-h') !== h) document.documentElement.style.setProperty('--sheet-h', h);
+  };
+  const clearSheet = (size) => {
+    clearTimeout(settling);
+    settling = 0;
+    sheet.classList.remove('dragging', 'settling');
     sheet.style.height = '';
     sheet.style.maxHeight = '';
-    sheet.dataset.size = size;
-    const h = sheet.getBoundingClientRect().height;
+    sheet.style.transform = '';
+    if (size) sheet.dataset.size = size;
+    syncSheetVar();
+  };
+  const measure = () => {
+    const saved = sheet.dataset.size;
+    const out = SIZES.map((size) => {
+      sheet.dataset.size = size;
+      return sheet.getBoundingClientRect().height;
+    });
     sheet.dataset.size = saved;
-    sheet.style.height = inline;
-    sheet.style.maxHeight = maxInline;
-    return h;
+    return out;
   };
   sheet.addEventListener('pointerdown', (e) => {
     if (desktop.matches || !e.target.closest('#grab, .head')) return;
-    drag = { id: e.pointerId, y: e.clientY, startH: sheet.getBoundingClientRect().height, moved: false, lastY: e.clientY, lastT: e.timeStamp, v: 0, onGrab: Boolean(e.target.closest('#grab')) };
+    if (settling) clearSheet(sheet.dataset.size);
+    drag = { id: e.pointerId, y: e.clientY, moved: false, lastY: e.clientY, lastT: e.timeStamp, v: 0, onGrab: Boolean(e.target.closest('#grab')) };
   });
   sheet.addEventListener('pointermove', (e) => {
     if (!drag || e.pointerId !== drag.id) return;
@@ -959,20 +1013,24 @@ function wire() {
     if (!drag.moved) {
       if (Math.abs(dy) < 6) return;
       drag.moved = true;
+      drag.startH = sheet.getBoundingClientRect().height;
+      drag.heights = measure();
+      drag.full = Math.round(window.innerHeight * 0.92);
       sheet.setPointerCapture(e.pointerId);
       sheet.classList.add('dragging');
+      sheet.style.height = `${drag.full}px`;
       sheet.style.maxHeight = 'none';
     }
     const dt = e.timeStamp - drag.lastT;
     if (dt > 0) drag.v = (e.clientY - drag.lastY) / dt;
     drag.lastY = e.clientY;
     drag.lastT = e.timeStamp;
-    const top = window.innerHeight * 0.92;
-    sheet.style.height = `${Math.max(84, Math.min(top, drag.startH - dy))}px`;
+    drag.visible = Math.max(84, Math.min(drag.full, drag.startH - dy));
+    sheet.style.transform = `translate3d(0, ${drag.full - drag.visible}px, 0)`;
   });
   const endDrag = (e) => {
     if (!drag || e.pointerId !== drag.id) return;
-    const { moved, v, onGrab } = drag;
+    const { moved, v, onGrab, heights, full, visible, startH } = drag;
     drag = null;
     if (!moved) {
       if (onGrab && e.type === 'pointerup') {
@@ -980,32 +1038,25 @@ function wire() {
       }
       return;
     }
-    const now = sheet.getBoundingClientRect().height;
-    const heights = SIZES.map(heightFor);
+    const now = visible ?? startH;
     let index = heights.reduce((best, h, i) => (Math.abs(h - now) < Math.abs(heights[best] - now) ? i : best), 0);
     if (v < -0.45) {
-      const up = heights.findIndex((h) => h > now + 1);
+      const up = heights.findIndex((h) => h > startH + 1);
       index = up === -1 ? SIZES.length - 1 : up;
     } else if (v > 0.45) {
       index = 0;
-      heights.forEach((h, i) => { if (h < now - 1) index = i; });
+      heights.forEach((h, i) => { if (h < startH - 1) index = i; });
     }
-    // Parte de la altura actual y deja que el panel se anime hasta su sitio.
-    sheet.style.height = '';
-    sheet.style.maxHeight = `${now}px`;
-    sheet.getBoundingClientRect();
     sheet.classList.remove('dragging');
-    sheet.dataset.size = SIZES[index];
-    sheet.style.maxHeight = '';
+    sheet.classList.add('settling');
+    sheet.style.transform = `translate3d(0, ${full - heights[index]}px, 0)`;
+    settling = setTimeout(() => clearSheet(SIZES[index]), reduced ? 0 : 230);
   };
   sheet.addEventListener('pointerup', endDrag);
   sheet.addEventListener('pointercancel', endDrag);
   new ResizeObserver(() => {
-    if (desktop.matches) {
-      document.documentElement.style.removeProperty('--sheet-h');
-      return;
-    }
-    document.documentElement.style.setProperty('--sheet-h', `${Math.round(sheet.getBoundingClientRect().height)}px`);
+    clearTimeout(sheetVarTimer);
+    sheetVarTimer = setTimeout(syncSheetVar, 60);
   }).observe(sheet);
 
   window.addEventListener('hashchange', () => {
@@ -1034,9 +1085,10 @@ async function start() {
     if (!map) tickData();
     renderSheet();
     renderClock();
+    updateApproach();
     checkAlert();
   }, 1000);
-  setInterval(() => followCamera(), 3000);
+  setInterval(() => followCamera(), 4000);
   await initMap();
   updatePins();
   const initial = location.hash.slice(1);
