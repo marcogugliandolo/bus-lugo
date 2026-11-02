@@ -2,14 +2,42 @@
 import { prepare, busesAt, arrivalsAt, approachPath, dayKind, formatMinutes, passTime, distanceMetres } from './sim.js';
 
 const TILES_CHECK = 'https://tiles.openfreemap.org/planet';
-const EXAMPLE_STOP = 's70'; // Rúa Vilalba 6: pasan 11 líneas y está junto a la Muralla.
 const CITY_BOUNDS = [[-7.585, 42.992], [-7.53, 43.035]];
 const NOTICES = [{
   title: 'Cambios en las líneas 7, 8, 9 y 12 por obras',
-  body: 'Los recorridos de la demo pueden no reflejar estos desvíos. El detalle está en la web del operador.',
-  source: 'buslugo.com, consultado el 2 de noviembre de 2026',
-  url: 'https://buslugo.com/',
+  lines: ['7', '8', '9', '12'],
+  body: 'El recorrido que ves en el mapa puede no incluir estos desvíos.',
+  date: 'Actualizado el 2 de noviembre de 2026',
 }];
+
+// Cómo llama el operador a cada línea (buslugo.com/lineas, 2 de noviembre de 2026).
+// Es lo que entiende quien no conoce la red; `hospital` marca las que llegan al HULA.
+const ROUTES = {
+  '1.1': { route: 'Campus USC – Fingoi – O Ceao' },
+  '1.2': { route: 'Campus USC – Fingoi – O Ceao – HULA', hospital: true },
+  '1.3': { route: 'Campus USC – Fontiñas – O Ceao' },
+  '1.4': { route: 'Campus USC – Fingoi – O Ceao – HULA', hospital: true },
+  2: { route: 'Rda. Xosé Castiñeira – Ramil' },
+  '3.1': { route: 'Rda. Muralla (Sindicatos) – Avda. Coruña – Fontiñas – Montirón – A Tolda' },
+  '3.2': { route: 'Rda. Muralla (Sindicatos) – Fontiñas – Montirón – A Tolda' },
+  '4.1': { route: 'Rda. Muralla (Sindicatos) – HULA, por Fervedoira', hospital: true },
+  '4.2': { route: 'Rda. Muralla (Sindicatos) – HULA, por As Gándaras', hospital: true },
+  '5DS': { route: 'Avda. das Américas – Magoi – Fontiñas – HULA', hospital: true },
+  '5ES': { route: 'Fonte dos Ranchos – Abella – Garabolos – HULA', hospital: true },
+  '5.1': { route: 'Avda. das Américas – Rda. Muralla – Fontiñas – Carqueixo – HULA', hospital: true },
+  '5.2': { route: 'Avda. das Américas – Magoi – Fontiñas – HULA', hospital: true },
+  6: { route: 'A Piringalla – Magoi – Acea de Olga – Veterinaria' },
+  7: { route: 'Casco Histórico (Bolaño) – Barrio da Ponte' },
+  8: { route: 'Casco Histórico (Bolaño) – A Cheda' },
+  9: { route: 'Casco Histórico (Bolaño) – Abella (Casás)' },
+  10: { route: 'Ramón Ferreiro – Cementerio' },
+  11: { route: 'Línea rural: Pías, Bóveda, Calde y Nadela' },
+  12: { route: 'Casco Histórico (Bolaño) – Polígono Gándaras' },
+  13: { route: 'Rda. Muralla (Sindicatos) – As Gándaras' },
+};
+const routeOf = (line) => ROUTES[line.number]?.route ?? line.name;
+const hasWorks = (number) => NOTICES.some((n) => n.lines.includes(number));
+const shortDays = (days) => (/lunes a viernes/i.test(days) ? 'Lunes a viernes' : (/todos/i.test(days) ? 'Todos los días' : days));
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -28,11 +56,12 @@ let stopsData = null;
 const state = {
   view: 'home',            // home | stop | bus | menu | line | notices | sim | search
   stopId: null,
-  homeStopId: EXAMPLE_STOP,
+  homeStopId: null,
   me: null,
   arrivalKey: null,
   busKey: null,
   lineNumber: null,
+  lineDir: 0,
   query: '',
   alert: null,
   buses: [],
@@ -79,14 +108,16 @@ function setSim(changes) {
   syncSimPanel();
   tickData();
   renderSheet();
+  renderClock();
 }
 
+let sliderHeld = false;
 function syncSimPanel() {
   const c = clock();
   document.querySelectorAll('[data-day]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.day === c.kind)));
   document.querySelectorAll('[data-speed]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.speed) === (c.live ? 1 : sim.speed))));
   const slider = $('#sim-time');
-  if (document.activeElement !== slider) slider.value = String(Math.max(300, Math.floor(c.t)));
+  if (!sliderHeld) slider.value = String(Math.max(300, Math.floor(c.t)));
   $('#sim-out').textContent = formatMinutes(Math.floor(c.t));
   $('#sim-live').hidden = c.live;
 }
@@ -121,11 +152,11 @@ function addOverlays() {
   map.addSource('focus', { type: 'geojson', data: empty });
   map.addSource('approach', { type: 'geojson', data: empty });
   const round = { 'line-cap': 'round', 'line-join': 'round' };
-  map.addLayer({ id: 'routes', type: 'line', source: 'routes', layout: round, paint: { 'line-color': ['get', 'color'], 'line-opacity': 0.5, 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 1.4, 15, 3, 18, 6] } });
+  map.addLayer({ id: 'routes', type: 'line', source: 'routes', layout: round, paint: { 'line-color': ['get', 'color'], 'line-opacity': 0.34, 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 1, 15, 2.4, 18, 5] } });
   map.addLayer({ id: 'route-sel', type: 'line', source: 'routes', layout: round, filter: ['==', ['get', 'number'], ''], paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 3, 15, 5, 18, 8] } });
   map.addLayer({ id: 'focus', type: 'line', source: 'focus', layout: round, paint: { 'line-color': ['get', 'color'], 'line-opacity': 0.7, 'line-width': 4 } });
   map.addLayer({ id: 'approach', type: 'line', source: 'approach', layout: round, paint: { 'line-color': token('--ink'), 'line-width': 6 } });
-  map.addLayer({ id: 'bus-stops', type: 'circle', source: 'bus-stops', minzoom: 13, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 13, 1.8, 16, 4.5], 'circle-color': token('--surface'), 'circle-stroke-color': token('--mute'), 'circle-stroke-width': 1.2 } });
+  map.addLayer({ id: 'bus-stops', type: 'circle', source: 'bus-stops', minzoom: 14.6, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 14.6, 2.6, 16, 4.5], 'circle-color': token('--surface'), 'circle-stroke-color': token('--mute'), 'circle-stroke-width': 1.2 } });
   mapReady = true;
   applyMapFocus(false);
   updateApproach();
@@ -151,7 +182,7 @@ async function initMap() {
       style: await buildStyle(),
       bounds: CITY_BOUNDS,
       fitBoundsOptions: { padding: mapPadding() },
-      attributionControl: { compact: true },
+      attributionControl: false,
       dragRotate: false,
       pitchWithRotate: false,
       maxZoom: 18,
@@ -203,7 +234,7 @@ const asLine = (coords, properties = {}) => ({ type: 'Feature', properties, geom
 function applyMapFocus() {
   if (!mapReady) return;
   const focused = state.view === 'line' || state.view === 'stop' || state.view === 'bus';
-  map.setPaintProperty('routes', 'line-opacity', focused ? 0.16 : (isDark() ? 0.6 : 0.5));
+  map.setPaintProperty('routes', 'line-opacity', focused ? 0.12 : (isDark() ? 0.42 : 0.34));
   map.setFilter('route-sel', ['==', ['get', 'number'], state.view === 'line' ? state.lineNumber : '']);
 }
 
@@ -336,7 +367,7 @@ function updatePins() {
     el.className = state.view === 'home' ? 'pin' : 'pin sel';
     if (state.view !== 'home') {
       const tag = document.createElement('span');
-      tag.textContent = 'Tu parada';
+      tag.textContent = stop.name;
       el.append(tag);
     }
     stopPin = new maplibregl.Marker({ element: el }).setLngLat([stop.lng, stop.lat]).addTo(map);
@@ -375,13 +406,14 @@ function updateApproach() {
 
 /* ---------- Panel ---------- */
 const minutesHTML = (eta) => (eta === 0 ? 'Ahora' : `${eta}<small> min</small>`);
-const BACK = '<button type="button" class="back" data-act="back" aria-label="Volver"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>';
-const FOOT = '<p class="foot">Posición estimada con el horario oficial, sin GPS real. Web no oficial. Datos: <a href="https://buslugo.com/" target="_blank" rel="noopener">buslugo.com</a>.</p>';
+const BACK = '<button type="button" class="back" data-act="back" ><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>Volver</button>';
+const FOOT = '<p class="foot">Hora y posición aproximadas según el horario. Web no oficial.</p>';
+const MAP_CREDIT = 'Mapa: OpenFreeMap © OpenMapTiles. Datos © OpenStreetMap.';
 
-function arrivalRow(a, selected, withHead) {
+function arrivalRow(a, selected) {
   return `<button type="button" class="row${selected ? ' sel' : ''}" data-act="arrival" data-key="${esc(a.key)}" data-stop="${esc(a.stopId)}">
     <span class="badge" style="--c:${a.line.color}">${esc(a.line.number)}</span>
-    <span class="to">${esc(a.dir.dest)}<small>${withHead ? `a las ${a.time}` : ''}</small></span>
+    <span class="to">${esc(a.dir.dest)}<small>a las ${a.time}</small></span>
     <span class="eta">${minutesHTML(a.eta)}</span>
   </button>`;
 }
@@ -398,15 +430,25 @@ function currentHero() {
 }
 
 function homeHTML() {
+  const c = clock();
+  const wake = !state.buses.length && c.live
+    ? `<p class="empty">Ahora mismo no hay buses en la calle.</p><button type="button" class="cta second" data-act="sim10">Ver cómo se mueven a las 10:00</button>`
+    : '';
+  if (!state.homeStopId) {
+    return `<div class="head"><div><h1>¿A dónde quieres ir?</h1><small>Toca un bus o una parada para saber cuándo llega</small></div></div>
+      <div class="buttons one">
+        <button type="button" class="cta" data-act="near">Ver la parada más cercana</button>
+        <button type="button" class="cta second" data-act="menu">Ver todas las líneas</button>
+      </div>${wake}`;
+  }
   const stop = net.stopById.get(state.homeStopId);
   const list = arrivalsFor(stop.id).slice(0, 3);
-  const c = clock();
-  const where = state.me ? `a ${Math.round(distanceMetres(state.me.lat, state.me.lng, stop.lat, stop.lng) / 10) * 10} m de ti` : 'Parada de ejemplo. Usa la flecha para ver la tuya';
+  const where = state.me ? `Tu parada más cercana, a ${Math.round(distanceMetres(state.me.lat, state.me.lng, stop.lat, stop.lng) / 10) * 10} m` : 'Tu parada';
   const rows = list.length
-    ? `<div class="rows">${list.map((a) => arrivalRow(a, false, false)).join('')}</div>`
-    : `<p class="empty">${state.buses.length ? 'No hay buses por esta parada en las próximas dos horas.' : 'Ahora mismo no hay buses en la calle.'}</p>`;
-  const wake = !state.buses.length && c.live ? '<button type="button" class="cta" data-act="sim10">Ver cómo se mueven a las 10:00</button>' : '';
-  return `<div class="head"><div><h1>${esc(stop.name)}</h1><small>${esc(where)}</small></div></div>${rows}${wake}${FOOT}`;
+    ? `<div class="rows">${list.map((a) => arrivalRow(a, false)).join('')}</div>`
+    : '<p class="empty">No pasa ningún bus por aquí en las próximas dos horas.</p>';
+  return `<div class="head"><div><h1>${esc(stop.name)}</h1><small>${esc(where)}</small></div></div>${rows}${wake}
+    <button type="button" class="cta second" data-act="menu">Ver todas las líneas</button>`;
 }
 
 function stepsHTML(bus, a) {
@@ -415,7 +457,7 @@ function stepsHTML(bus, a) {
   let track = `<i class="from" style="--c:${a.line.color}"></i><b></b>`;
   for (let i = 0; i < dots; i++) track += '<i></i><b></b>';
   track += '<i class="to"></i>';
-  const label = left === 0 ? "Es la siguiente" : left === 1 ? "Falta 1 parada" : `Faltan ${left} paradas`;
+  const label = left === 0 ? 'Tu parada es la siguiente' : left === 1 ? 'Falta 1 parada' : `Faltan ${left} paradas`;
   return `<div class="steps"><div class="track" aria-hidden="true">${track}</div><span>${label}</span></div>`;
 }
 
@@ -423,12 +465,12 @@ function stopHTML() {
   const stop = net.stopById.get(state.stopId);
   const list = arrivalsFor(stop.id);
   const hero = list.find((a) => a.key === state.arrivalKey) ?? list[0];
-  const sub = stop.code ? `Poste ${esc(stop.code)}` : 'Parada';
+  const sub = stop.code ? `Código de parada: ${esc(stop.code)}` : 'Parada';
   const head = `<div class="head">${BACK}<div><h1>${esc(stop.name)}</h1><small>${sub}</small></div></div>`;
-  if (!hero) return `${head}<p class="empty">No hay buses por esta parada en las próximas dos horas.</p>${FOOT}`;
+  if (!hero) return `${head}<p class="empty">No pasa ningún bus por aquí en las próximas dos horas.</p>${FOOT}`;
   const bus = state.busByKey.get(hero.key);
-  const label = bus ? 'Tu bus llega en' : 'Sale de cabecera en';
-  const big = hero.eta === 0 ? 'Ya' : `${hero.eta} min`;
+  const label = hero.eta === 0 ? 'El próximo bus' : (bus ? 'El próximo bus llega en' : 'Sale del inicio de la línea en');
+  const big = hero.eta === 0 ? 'Ya llega' : `${hero.eta} min`;
   const armed = state.alert?.key === hero.key;
   const canAlert = hero.minutes - clock().t > 2;
   const later = list.filter((a) => a.key !== hero.key).slice(0, 5);
@@ -443,10 +485,10 @@ function stopHTML() {
         ${bus ? stepsHTML(bus, hero) : ''}
         <div class="buttons">
           ${canAlert ? `<button type="button" class="cta${armed ? ' on' : ''}" data-act="alert" data-key="${esc(hero.key)}">${armed ? 'Aviso activado · Quitar' : 'Avísame 2 min antes'}</button>` : ''}
-          ${bus ? `<button type="button" class="cta second" data-act="follow" data-key="${esc(hero.key)}">Seguir el bus</button>` : ''}
+          ${bus ? `<button type="button" class="cta second" data-act="follow" data-key="${esc(hero.key)}">Ver por dónde va</button>` : ''}
         </div>
       </div>
-      <div class="rows"><h2>Después</h2>${later.length ? later.map((a) => arrivalRow(a, false, false)).join('') : '<p class="empty">No hay más buses en las próximas dos horas.</p>'}</div>
+      <div class="rows"><h2>Los siguientes</h2>${later.length ? later.map((a) => arrivalRow(a, false)).join('') : '<p class="empty">No hay más buses en las próximas dos horas.</p>'}</div>
     </div>${FOOT}`;
 }
 
@@ -458,7 +500,7 @@ function busHTML() {
   const c = clock();
   if (bus.parkedUntil) {
     const end = net.stopById.get(bus.dir.stops[bus.dir.stops.length - 1]);
-    return `<div class="head">${BACK}<span class="badge" style="--c:${bus.line.color}">${esc(bus.line.number)}</span><div><small>En cabecera: ${esc(end.name)}</small></div></div>
+    return `<div class="head">${BACK}<span class="badge" style="--c:${bus.line.color}">${esc(bus.line.number)}</span><div><small>Parado en ${esc(end.name)}</small></div></div>
       <p class="big-line">Vuelve a salir a las ${formatMinutes(bus.parkedUntil)}</p>${FOOT}`;
   }
   const svc = bus.dir.svc[c.kind];
@@ -477,29 +519,44 @@ function busHTML() {
   }).join('');
   return `<div class="head">${BACK}<span class="badge" style="--c:${bus.line.color}">${esc(bus.line.number)}</span><div><small>Hacia ${esc(bus.dir.dest)}</small></div></div>
     <p class="big-line">${title}</p>
-    <ol class="tl">${rows}</ol>
-    <button type="button" class="cta second" data-act="soon">Voy en este bus · Próximamente</button>${FOOT}`;
+    <ol class="tl">${rows}</ol>${FOOT}`;
+}
+
+function lineDirections() {
+  return net.lines.filter((l) => l.number === state.lineNumber).flatMap((line) => line.dirs.map((dir) => ({ line, dir })));
 }
 
 function lineHTML() {
   const group = net.lines.filter((l) => l.number === state.lineNumber);
   const line = group[0];
-  const running = state.buses.filter((b) => b.line.number === state.lineNumber).length;
-  const variants = group.map((l) => `<div class="row"><span class="to">${esc(l.name)}<small>${esc(l.days)} · ${esc(l.frequency)} · de ${esc(l.first)} a ${esc(l.last)}</small></span></div>`).join('');
+  const running = state.buses.filter((b) => b.line.number === state.lineNumber && !b.parkedUntil).length;
   const stateText = running === 0 ? 'Ningún bus en ruta ahora' : `${running} bus${running === 1 ? '' : 'es'} en ruta ahora`;
-  return `<div class="head">${BACK}<span class="badge big" style="--c:${line.color}">${esc(line.number)}</span><div><h1>Línea ${esc(line.number)}</h1><small>${stateText}</small></div></div>
-    <div class="rows">${variants}</div>${FOOT}`;
+  const dirs = lineDirections();
+  const current = dirs[Math.min(state.lineDir, dirs.length - 1)];
+  const hours = [...new Set(group.map((l) => [shortDays(l.days), /consultar/i.test(l.frequency) ? '' : l.frequency, `de ${l.first} a ${l.last}`].filter(Boolean).join(' · ')))];
+  const notice = hasWorks(state.lineNumber) ? `<div class="notice-item"><strong>Cambios por obras</strong>${esc(NOTICES[0].body)}</div>` : '';
+  const dests = dirs.map((d) => d.dir.dest);
+  const dirLabel = (d) => (dests.filter((x) => x === d.dir.dest).length > 1 ? `De ${d.dir.origin} a ${d.dir.dest}` : `Hacia ${d.dir.dest}`);
+  const buttons = dirs.map((d, i) => `<button type="button" data-act="line-dir" data-index="${i}" aria-pressed="${i === Math.min(state.lineDir, dirs.length - 1)}">${esc(dirLabel(d))}</button>`).join('');
+  const stops = current.dir.stops.map((id) => {
+    const stop = net.stopById.get(id);
+    return `<button type="button" class="row" data-act="stop" data-id="${esc(id)}"><span class="to">${esc(stop?.name ?? id)}</span></button>`;
+  }).join('');
+  return `<div class="head">${BACK}<span class="badge big" style="--c:${line.color}">${esc(line.number)}</span><div><h1 class="route">${esc(routeOf(line))}</h1><small>${stateText}</small></div></div>
+    <p class="hours">${hours.map(esc).join('<br>')}</p>${notice}
+    <div class="dirs" role="group" aria-label="Sentido">${buttons}</div>
+    <div class="rows"><h2>${current.dir.stops.length} paradas</h2>${stops}</div>${FOOT}`;
 }
 
 function searchHTML() {
   const q = norm(state.query.trim());
   if (!q) return `<div class="head">${BACK}<div><h1>Buscar</h1><small>Escribe el nombre de una parada o una línea</small></div></div>`;
-  const lines = [...new Map(net.lines.filter((l) => norm(l.number).startsWith(q) || norm(l.name).includes(q)).map((l) => [l.number, l])).values()].slice(0, 6);
+  const lines = [...new Map(net.lines.filter((l) => norm(l.number).startsWith(q) || norm(routeOf(l)).includes(q) || norm(l.name).includes(q) || (ROUTES[l.number]?.hospital && 'hospital'.startsWith(q))).map((l) => [l.number, l])).values()].slice(0, 8);
   const stops = net.stops.filter((s) => norm(s.name).includes(q) || (s.code && s.code.toLowerCase() === q)).slice(0, 30);
   if (!lines.length && !stops.length) return `<div class="head">${BACK}<div><h1>Sin resultados</h1><small>Prueba con otra parte del nombre, como «Fontiñas» o «HULA»</small></div></div>`;
   return `<div class="head">${BACK}<div><h1>${stops.length + lines.length} resultado${stops.length + lines.length === 1 ? '' : 's'}</h1></div></div>
     <div class="rows">
-      ${lines.map((l) => `<button type="button" class="row" data-act="line" data-number="${esc(l.number)}"><span class="badge" style="--c:${l.color}">${esc(l.number)}</span><span class="to">${esc(l.name)}</span></button>`).join('')}
+      ${lines.map((l) => `<button type="button" class="row" data-act="line" data-number="${esc(l.number)}"><span class="badge" style="--c:${l.color}">${esc(l.number)}</span><span class="to">${esc(routeOf(l))}</span></button>`).join('')}
       ${stops.map((s) => `<button type="button" class="row" data-act="stop" data-id="${esc(s.id)}"><span class="to">${esc(s.name)}<small>${s.lines.length} línea${s.lines.length === 1 ? '' : 's'}</small></span></button>`).join('')}
     </div>`;
 }
@@ -507,24 +564,29 @@ function searchHTML() {
 function menuHTML() {
   const numbers = [...new Map(net.lines.map((l) => [l.number, l])).values()];
   const c = clock();
-  const simText = c.live ? 'Ver los buses a otra hora' : `Ahora en simulación, ${formatMinutes(Math.floor(c.t))}`;
-  return `<div class="head">${BACK}<div><h1>Menú</h1></div></div>
-    <div class="rows"><h2>Líneas</h2>
-      <div class="line-grid">${numbers.map((l) => `<button type="button" data-act="line" data-number="${esc(l.number)}" style="--c:${l.color}" aria-label="Línea ${esc(l.number)}">${esc(l.number)}</button>`).join('')}</div>
-    </div>
+  const simText = c.live ? 'Mira cómo se mueven los buses en otro momento' : `Ahora ves las ${formatMinutes(Math.floor(c.t))}`;
+  const rows = numbers.map((l) => {
+    const hospital = (ROUTES[l.number]?.hospital ? ' · Va al hospital' : '') + (hasWorks(l.number) ? ' · Cambios por obras' : '');
+    return `<button type="button" class="row" data-act="line" data-number="${esc(l.number)}">
+      <span class="badge" style="--c:${l.color}">${esc(l.number)}</span>
+      <span class="to">${esc(routeOf(l))}<small>${esc(shortDays(l.days))}${hospital}</small></span>
+    </button>`;
+  }).join('');
+  return `<div class="head">${BACK}<div><h1>Todas las líneas</h1><small>Toca una línea para ver su recorrido y sus paradas</small></div></div>
+    <div class="rows">${rows}</div>
     <div class="rows">
       <button type="button" class="row" data-act="notices"><span class="to">Avisos del servicio</span><span class="count">${NOTICES.length}</span></button>
-      <button type="button" class="row" data-act="sim"><span class="to">Simular otro momento<small>${esc(simText)}</small></span></button>
+      <button type="button" class="row" data-act="sim"><span class="to">Ver otra hora<small>${esc(simText)}</small></span></button>
     </div>${FOOT}`;
 }
 
 function simHTML() {
-  return `<div class="head">${BACK}<div><h1>Simular otro momento</h1><small>Elige hora, día y velocidad</small></div></div>`;
+  return `<div class="head">${BACK}<div><h1>Ver otra hora</h1><small>Elige el momento que quieres ver</small></div></div>`;
 }
 
 function noticesHTML() {
   return `<div class="head">${BACK}<div><h1>Avisos</h1></div></div>
-    ${NOTICES.map((n) => `<div class="notice-item"><strong>${esc(n.title)}</strong>${esc(n.body)}<small><a href="${esc(n.url)}" target="_blank" rel="noopener">${esc(n.source)}</a></small></div>`).join('')}
+    ${NOTICES.map((n) => `<div class="notice-item"><strong>${esc(n.title)}</strong>${esc(n.body)}<small>${esc(n.date)}</small></div>`).join('')}
     ${FOOT}`;
 }
 
@@ -543,6 +605,7 @@ function renderClock() {
   const count = `${n} bus${n === 1 ? '' : 'es'}`;
   const el = $('#clock');
   el.classList.toggle('sim', !c.live);
+  el.hidden = c.live;
   const label = { laborable: 'laborable', sabado: 'sábado', domingo: 'domingo' }[c.kind];
   el.innerHTML = c.live
     ? `<i></i>${count} · ${formatMinutes(Math.floor(c.t))}`
@@ -579,7 +642,7 @@ function go(view) {
   if (view !== state.view && state.view !== 'search' && state.view !== 'notices') state.previous = state.view;
   state.view = view;
   document.body.dataset.view = view;
-  if ($('#sheet').dataset.size === 'peek') $('#sheet').dataset.size = 'mid';
+  $('#sheet').dataset.size = view === 'menu' || view === 'search' ? 'tall' : 'mid';
   $('#simpanel').hidden = view !== 'sim';
   if (view === 'sim') syncSimPanel();
   renderSheet();
@@ -625,6 +688,7 @@ function selectBus(key) {
 
 function selectLine(number) {
   state.lineNumber = number;
+  state.lineDir = 0;
   go('line');
   const points = net.lines.filter((l) => l.number === number).flatMap((l) => l.dirs.flatMap((d) => d.path));
   requestAnimationFrame(() => moveTo(points, 15));
@@ -652,9 +716,10 @@ function goBack() {
 }
 
 async function locate() {
-  if (!navigator.geolocation) { toast('Este navegador no da la ubicación. Busca tu parada por el nombre.'); return; }
+  if (!navigator.geolocation) { toast('Este navegador no da tu ubicación. Escribe el nombre de tu parada arriba.'); return; }
   navigator.geolocation.getCurrentPosition((pos) => {
     state.me = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    document.body.dataset.located = 'yes';
     let best = net.stops[0];
     let bestD = Infinity;
     for (const s of net.stops) {
@@ -669,7 +734,7 @@ async function locate() {
       return;
     }
     requestAnimationFrame(() => moveTo([[state.me.lat, state.me.lng], [best.lat, best.lng]], 16));
-  }, () => toast('No se ha podido obtener tu ubicación. Busca tu parada por el nombre.'), { timeout: 8000, maximumAge: 60000 });
+  }, () => toast('No hemos podido saber dónde estás. Escribe el nombre de tu parada arriba.'), { timeout: 8000, maximumAge: 60000 });
 }
 
 function wire() {
@@ -682,8 +747,15 @@ function wire() {
     else if (act === 'line') selectLine(t.dataset.number);
     else if (act === 'follow') selectBus(t.dataset.key);
     else if (act === 'notices') go('notices');
+    else if (act === 'line-dir') {
+      state.lineDir = Number(t.dataset.index);
+      renderSheet();
+      const d = lineDirections()[state.lineDir];
+      requestAnimationFrame(() => moveTo(d.dir.path, 15));
+    }
     else if (act === 'sim') go('sim');
-    else if (act === 'soon') toast('Compartir la posición del bus aún no está en la demo.');
+    else if (act === 'near') locate();
+    else if (act === 'menu') go('menu');
     else if (act === 'sim10') setSim({ base: 600, kind: 'laborable', speed: 1 });
     else if (act === 'arrival') {
       if (state.view === 'home') {
@@ -725,10 +797,14 @@ function wire() {
     else go('menu');
   });
   $('#locate').addEventListener('click', locate);
+  $('#credit').addEventListener('click', () => toast(MAP_CREDIT));
   $('#zoom-in').addEventListener('click', () => map?.zoomIn());
   $('#zoom-out').addEventListener('click', () => map?.zoomOut());
-  $('#clock').addEventListener('click', () => go('sim'));
-  $('#sim-time').addEventListener('input', (e) => setSim({ base: Number(e.target.value) }));
+  $('#clock').addEventListener('click', () => { if (sim.on) go('sim'); });
+  const slider = $('#sim-time');
+  slider.addEventListener('pointerdown', () => { sliderHeld = true; });
+  ['pointerup', 'pointercancel', 'blur'].forEach((type) => slider.addEventListener(type, () => { sliderHeld = false; }));
+  slider.addEventListener('input', (e) => setSim({ base: Number(e.target.value) }));
   document.querySelectorAll('[data-day]').forEach((b) => b.addEventListener('click', () => setSim({ kind: b.dataset.day })));
   document.querySelectorAll('[data-speed]').forEach((b) => b.addEventListener('click', () => setSim({ speed: Number(b.dataset.speed) })));
   $('#sim-live').addEventListener('click', () => {
@@ -737,22 +813,77 @@ function wire() {
     syncSimPanel();
     tickData();
     renderSheet();
+    renderClock();
   });
 
-  // Panel inferior: tocar el asa cambia de tamaño; arrastrar elige hacia dónde.
+  // Panel inferior: se arrastra con el dedo desde el asa o el título y se queda en tres alturas.
   const sheet = $('#sheet');
-  const sizes = ['peek', 'mid', 'tall'];
-  let startY = null;
-  const grab = $('#grab');
-  grab.addEventListener('pointerdown', (e) => { startY = e.clientY; grab.setPointerCapture(e.pointerId); });
-  grab.addEventListener('pointerup', (e) => {
-    if (startY === null) return;
-    const dy = e.clientY - startY;
-    startY = null;
-    const i = sizes.indexOf(sheet.dataset.size);
-    if (Math.abs(dy) < 8) sheet.dataset.size = sizes[(i + 1) % sizes.length];
-    else sheet.dataset.size = sizes[Math.max(0, Math.min(2, i + (dy < 0 ? 1 : -1)))];
+  const SIZES = ['peek', 'mid', 'tall'];
+  let drag = null;
+  const heightFor = (size) => {
+    const saved = sheet.dataset.size;
+    const inline = sheet.style.height;
+    const maxInline = sheet.style.maxHeight;
+    sheet.style.height = '';
+    sheet.style.maxHeight = '';
+    sheet.dataset.size = size;
+    const h = sheet.getBoundingClientRect().height;
+    sheet.dataset.size = saved;
+    sheet.style.height = inline;
+    sheet.style.maxHeight = maxInline;
+    return h;
+  };
+  sheet.addEventListener('pointerdown', (e) => {
+    if (desktop.matches || !e.target.closest('#grab, .head')) return;
+    drag = { id: e.pointerId, y: e.clientY, startH: sheet.getBoundingClientRect().height, moved: false, lastY: e.clientY, lastT: e.timeStamp, v: 0, onGrab: Boolean(e.target.closest('#grab')) };
   });
+  sheet.addEventListener('pointermove', (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const dy = e.clientY - drag.y;
+    if (!drag.moved) {
+      if (Math.abs(dy) < 6) return;
+      drag.moved = true;
+      sheet.setPointerCapture(e.pointerId);
+      sheet.classList.add('dragging');
+      sheet.style.maxHeight = 'none';
+    }
+    const dt = e.timeStamp - drag.lastT;
+    if (dt > 0) drag.v = (e.clientY - drag.lastY) / dt;
+    drag.lastY = e.clientY;
+    drag.lastT = e.timeStamp;
+    const top = window.innerHeight * 0.92;
+    sheet.style.height = `${Math.max(84, Math.min(top, drag.startH - dy))}px`;
+  });
+  const endDrag = (e) => {
+    if (!drag || e.pointerId !== drag.id) return;
+    const { moved, v, onGrab } = drag;
+    drag = null;
+    if (!moved) {
+      if (onGrab && e.type === 'pointerup') {
+        sheet.dataset.size = SIZES[(SIZES.indexOf(sheet.dataset.size) + 1) % SIZES.length];
+      }
+      return;
+    }
+    const now = sheet.getBoundingClientRect().height;
+    const heights = SIZES.map(heightFor);
+    let index = heights.reduce((best, h, i) => (Math.abs(h - now) < Math.abs(heights[best] - now) ? i : best), 0);
+    if (v < -0.45) {
+      const up = heights.findIndex((h) => h > now + 1);
+      index = up === -1 ? SIZES.length - 1 : up;
+    } else if (v > 0.45) {
+      index = 0;
+      heights.forEach((h, i) => { if (h < now - 1) index = i; });
+    }
+    // Parte de la altura actual y deja que el panel se anime hasta su sitio.
+    sheet.style.height = '';
+    sheet.style.maxHeight = `${now}px`;
+    sheet.getBoundingClientRect();
+    sheet.classList.remove('dragging');
+    sheet.dataset.size = SIZES[index];
+    sheet.style.maxHeight = '';
+  };
+  sheet.addEventListener('pointerup', endDrag);
+  sheet.addEventListener('pointercancel', endDrag);
   new ResizeObserver(() => {
     if (desktop.matches) {
       document.documentElement.style.removeProperty('--sheet-h');

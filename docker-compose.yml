@@ -20,6 +20,8 @@ services:
     image: nginx:1.27-alpine
     container_name: bus-lugo
     restart: unless-stopped
+    stop_signal: SIGTERM
+    stop_grace_period: 5s
     ports:
       - "${BUS_PORT:-3091}:3000"
     networks:

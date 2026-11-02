@@ -21,11 +21,11 @@
     <label class="search" for="q">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
       <span class="sr">Buscar parada o línea</span>
-      <input id="q" type="search" placeholder="¿A qué parada vas?" autocomplete="off" enterkeyhint="search">
+      <input id="q" type="search" placeholder="Busca parada o línea" autocomplete="off" enterkeyhint="search">
     </label>
-    <button type="button" id="menu" class="round" aria-label="Abrir el menú: líneas, avisos y simulación">
+    <button type="button" id="menu" class="round menu-btn">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
-      <span class="dot"></span>
+      Líneas
     </button>
   </div>
   <section id="sheet" data-size="mid" aria-label="Información">
@@ -58,6 +58,7 @@
   <button type="button" id="zoom-in" aria-label="Acercar">+</button>
   <button type="button" id="zoom-out" aria-label="Alejar">−</button>
 </div>
+<button type="button" id="credit" aria-label="Créditos del mapa">i</button>
 <div id="toast" role="status" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>
