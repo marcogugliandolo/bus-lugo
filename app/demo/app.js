@@ -503,12 +503,13 @@ const MAP_CREDIT = 'Mapa: OpenFreeMap © OpenMapTiles. Datos © OpenStreetMap.';
 const BELL = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>';
 const ALERT_OPTIONS = [2, 5, 10];
 
-function bellButton(a) {
+function bellButton(a, { wide = false } = {}) {
   const armed = state.alerts.find((x) => x.key === a.key && x.stopId === a.stopId);
   const left = a.minutes - clock().t;
   if (!armed && left <= ALERT_OPTIONS[0]) return '';
-  const label = armed ? `Aviso ${armed.before} minutos antes. Cambiar` : 'Avisarme antes de que llegue';
-  return `<button type="button" class="bell${armed ? ' on' : ''}" data-act="bell" data-key="${esc(a.key)}" data-stop="${esc(a.stopId)}" aria-label="${label}" aria-expanded="${state.bellFor === a.key}">${BELL}${armed ? `<span>${armed.before} min</span>` : ''}</button>`;
+  const label = armed ? `Aviso ${armed.before} minutos antes. Cambiar` : 'Avísame antes de que llegue';
+  const text = armed ? `<span>${armed.before} min${wide ? ' antes' : ''}</span>` : wide ? '<span>Avísame</span>' : '';
+  return `<button type="button" class="bell${armed ? ' on' : ''}${wide ? ' wide' : ''}" data-act="bell" data-key="${esc(a.key)}" data-stop="${esc(a.stopId)}" aria-label="${label}" aria-expanded="${state.bellFor === a.key}">${BELL}${text}</button>`;
 }
 
 function bellChooser(a) {
@@ -660,14 +661,13 @@ function stopHTML() {
         <div class="hero-line">
           <span class="badge big" style="--c:${hero.line.color}">${esc(hero.line.number)}</span>
           <p class="hacia">Hacia <strong>${esc(nice(hero.dir.dest))}</strong></p>
-          ${bellButton(hero)}
         </div>
+        <div class="hero-time"><span class="bignum">${big}</span><span>a las ${hero.time}</span>${bellButton(hero, { wide: true })}</div>
         ${bellChooser(hero)}
-        <div class="hero-time"><span class="bignum">${big}</span><span>a las ${hero.time}</span></div>
         ${card}
         ${bus ? stripHTML(bus, { target: hero.stopIndex }) : ''}
       </div>
-      <div class="rows"><h2>Después pasan</h2>${later.length ? later.map((a) => arrivalRow(a)).join('') : '<p class="empty">No hay más buses en las próximas dos horas.</p>'}</div>
+      <div class="rows"><h2>Después pasan</h2>${later.length ? '<p class="bell-hint">Toca la campana y te avisamos antes de que llegue.</p>' : ''}${later.length ? later.map((a) => arrivalRow(a)).join('') : '<p class="empty">No hay más buses en las próximas dos horas.</p>'}</div>
     </div>${FOOT}`;
 }
 
@@ -820,7 +820,7 @@ function menuHTML() {
   return `<div class="head">${BACK}<div><h1>Líneas con buses ahora</h1><small>Toca una para ver dónde está su bus</small></div></div>
     ${list}${idleBlock}
     <div class="rows">
-      <button type="button" class="row" data-act="notices"><span class="to">Avisos del servicio</span><span class="count">${NOTICES.length}</span></button>
+      <button type="button" class="row" data-act="notices"><span class="to">Obras y cambios en las líneas</span><span class="count">${NOTICES.length}</span></button>
       <button type="button" class="row" data-act="sim"><span class="to">Ver otra hora<small>${esc(simText)}</small></span></button>
     </div>${FOOT}`;
 }
@@ -830,7 +830,7 @@ function simHTML() {
 }
 
 function noticesHTML() {
-  return `<div class="head">${BACK}<div><h1>Avisos</h1></div></div>
+  return `<div class="head">${BACK}<div><h1>Obras y cambios</h1></div></div>
     ${NOTICES.map((n) => `<div class="notice-item"><strong>${esc(n.title)}</strong>${esc(n.body)}<small>${esc(n.date)}</small></div>`).join('')}
     ${FOOT}`;
 }
