@@ -1,7 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Xa Vén"><defs><linearGradient id="fondo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2F73FF"/><stop offset="1" stop-color="#123FBD"/></linearGradient></defs><rect width="512" height="512" rx="116" fill="url(#fondo)"/>
-<path d="M256 62C160 62 90 134 90 226c0 104 118 196 152 220a24 24 0 0 0 28 0c34-24 152-116 152-220C422 134 352 62 256 62z" fill="#FFFFFF"/>
-<rect x="166" y="132" width="180" height="186" rx="44" fill="#1C4FD6"/>
-<rect x="190" y="160" width="132" height="70" rx="18" fill="#FFFFFF"/>
-<circle cx="204" cy="272" r="17" fill="#FFC53D"/><circle cx="308" cy="272" r="17" fill="#FFC53D"/>
-<rect x="184" y="310" width="36" height="28" rx="10" fill="#1C4FD6"/><rect x="292" y="310" width="36" height="28" rx="10" fill="#1C4FD6"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Xa Vén"><rect width="512" height="512" rx="116" fill="#111318"/><path d="M132 214 256 410 380 214" fill="none" stroke="#FFFFFF" stroke-width="78" stroke-linecap="round" stroke-linejoin="round"/><circle cx="256" cy="156" r="58" fill="#FFC400"/></svg>
