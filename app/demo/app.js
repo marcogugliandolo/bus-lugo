@@ -70,6 +70,7 @@ const state = {
   alerts: [],
   bellFor: null,
   showStops: false,
+  showIdle: false,
   buses: [],
   busByKey: new Map(),
   previous: 'home',
@@ -547,6 +548,50 @@ function whereNow(bus) {
   return { label: 'Va entre', place: `${nice(prev.name)} y ${nextName}`, phase: 'between' };
 }
 
+/** Paradas alrededor del bus, con el bus dibujado en el sitio donde está ahora. */
+function stripHTML(bus, { target = null, full = false } = {}) {
+  const svc = bus.dir.svc[clock().kind];
+  const stops = bus.dir.stops;
+  const last = stops.length - 1;
+  const next = bus.nextStopIndex;
+  let shown;
+  if (full) shown = stops.map((_, i) => i).slice(next);
+  else if (target !== null) {
+    shown = [];
+    for (let i = next; i <= target; i++) shown.push(i);
+    if (shown.length > 4) shown = [shown[0], shown[1], null, target];
+  } else {
+    shown = [next];
+    if (next + 1 <= last) shown.push(next + 1);
+    if (next + 2 < last) shown.push(null);
+    if (next + 1 < last) shown.push(last);
+  }
+  const hiddenCount = () => {
+    const known = shown.filter((i) => i !== null);
+    const end = known[known.length - 1];
+    const start = known[known.indexOf(end) - 1];
+    return end - start - 1;
+  };
+  const row = (i, extra = '') => {
+    const name = nice(net.stopById.get(stops[i])?.name ?? stops[i]);
+    const isTarget = i === target;
+    const here = bus.stopped && i === next;
+    const cls = [here ? 'here' : '', isTarget ? 'you' : '', extra].filter(Boolean).join(' ');
+    const note = here ? '<small>El bus está aquí</small>' : (isTarget ? '<small>Tu parada</small>' : '');
+    return `<li class="${cls}"><time>${formatMinutes(passTime(svc, bus.run, i))}</time><span class="rail"></span><span>${esc(name)}${note}</span></li>`;
+  };
+  let html = '';
+  if (next > 0 && !bus.stopped) html += row(next - 1, 'past');
+  if (!bus.stopped) html += '<li class="bus-now"><time>Ahora</time><span class="rail"></span><span>El bus va por aquí</span></li>';
+  for (const i of shown) {
+    if (i === null) {
+      const n = hiddenCount();
+      if (n > 0) html += `<li class="gap"><time></time><span class="rail"></span><span>${n === 1 ? '1 parada más' : `${n} paradas más`}</span></li>`;
+    } else html += row(i);
+  }
+  return `<ol class="tl strip" style="--c:${bus.line.color}">${html}</ol>`;
+}
+
 function nowCard(label, place, detail, key) {
   const inner = `<span class="now-text"><span class="now-label">${esc(label)}</span><strong>${esc(place)}</strong>${detail ? `<small>${esc(detail)}</small>` : ''}</span>`;
   return key
@@ -620,6 +665,7 @@ function stopHTML() {
         ${bellChooser(hero)}
         <div class="hero-time"><span class="bignum">${big}</span><span>a las ${hero.time}</span></div>
         ${card}
+        ${bus ? stripHTML(bus, { target: hero.stopIndex }) : ''}
       </div>
       <div class="rows"><h2>Después pasan</h2>${later.length ? later.map((a) => arrivalRow(a)).join('') : '<p class="empty">No hay más buses en las próximas dos horas.</p>'}</div>
     </div>${FOOT}`;
@@ -644,17 +690,10 @@ function busHTML() {
   const eta = Math.max(0, Math.round(targetTime - c.t));
   const arrives = toMine ? (eta === 0 ? 'Ya llega a tu parada' : `Llega a tu parada en ${eta} min`) : (eta === 0 ? 'Llegando al final del recorrido' : `Llega al final en ${eta} min`);
   const where = whereNow(bus);
-  const from = Math.max(0, bus.nextStopIndex - 1);
-  const rows = bus.dir.stops.slice(from).map((id, offset) => {
-    const i = from + offset;
-    const cls = i < bus.nextStopIndex ? 'past' : (i === mine ? 'you' : '');
-    const name = net.stopById.get(id)?.name ?? id;
-    return `<li class="${cls}"><time>${formatMinutes(passTime(svc, bus.run, i))}</time><span class="rail"></span><span>${esc(nice(name))}${i === mine ? ' · Tu parada' : ''}</span></li>`;
-  }).join('');
   return `<div class="head">${BACK}<span class="badge" style="--c:${bus.line.color}">${esc(bus.line.number)}</span><div><small>Hacia ${esc(nice(bus.dir.dest))}</small></div></div>
     ${nowCard(where.label, where.place, arrives)}
     <div class="rows"><h2>Su recorrido</h2></div>
-    <ol class="tl">${rows}</ol>${FOOT}`;
+    ${stripHTML(bus, { full: true, target: toMine ? mine : null })}${FOOT}`;
 }
 
 function lineDirections() {
@@ -689,7 +728,7 @@ function busCard(bus, kind) {
   const nextText = atOrArriving
     ? (bus.nextStopIndex < stops.length - 1 ? `Después va a ${nice(after?.name ?? '')}` : 'Es el final del recorrido')
     : `Siguiente parada: ${nice(next?.name ?? '')}${inMin ? `, en ${inMin} min` : ''}`;
-  return `<p class="card-title">Hacia ${esc(nice(bus.dir.dest))}</p>${nowCard(where.label, where.place, nextText, bus.key)}`;
+  return `<p class="card-title">Hacia ${esc(nice(bus.dir.dest))}</p>${nowCard(where.label, where.place, nextText, bus.key)}${stripHTML(bus)}`;
 }
 
 function lineHTML() {
@@ -735,24 +774,51 @@ function searchHTML() {
   if (!lines.length && !stops.length) return `<div class="head">${BACK}<div><h1>Sin resultados</h1><small>Prueba con otra parte del nombre, como «Fontiñas» o «HULA»</small></div></div>`;
   return `<div class="head">${BACK}<div><h1>${stops.length + lines.length} resultado${stops.length + lines.length === 1 ? '' : 's'}</h1></div></div>
     <div class="rows">
-      ${lines.map((l) => `<button type="button" class="row" data-act="line" data-number="${esc(l.number)}"><span class="badge" style="--c:${l.color}">${esc(l.number)}</span><span class="to">${esc(routeOf(l))}</span></button>`).join('')}
+      ${lines.map((l) => `<button type="button" class="row" data-act="line" data-number="${esc(l.number)}"><span class="badge" style="--c:${l.color}">${esc(l.number)}</span><span class="to">${esc(routeOf(l))}<small>${esc(lineStatus(l.number).text)}</small></span></button>`).join('')}
       ${stops.map((s) => `<button type="button" class="row" data-act="stop" data-id="${esc(s.id)}"><span class="to">${esc(nice(s.name))}<small>${s.lines.length} línea${s.lines.length === 1 ? '' : 's'}</small></span></button>`).join('')}
     </div>`;
+}
+
+const SOON_MINUTES = 20;
+
+/** Situación de una línea en este momento: buses en marcha y próxima salida de hoy. */
+function lineStatus(number) {
+  const c = clock();
+  const onRoad = state.buses.filter((b) => b.line.number === number).length;
+  const next = nextDepartureOf(number, c.kind, c.t);
+  const soon = next !== null && next - c.t <= SOON_MINUTES;
+  let text;
+  if (onRoad === 1) text = '1 bus en marcha';
+  else if (onRoad > 1) text = `${onRoad} buses en marcha`;
+  else if (next !== null) text = `Próxima salida a las ${formatMinutes(next)}`;
+  else text = 'Hoy ya no hay más salidas';
+  return { active: onRoad > 0 || soon, text };
+}
+
+function lineRow(l) {
+  const status = lineStatus(l.number);
+  const works = hasWorks(l.number) ? ' · Cambios por obras' : '';
+  return `<button type="button" class="row" data-act="line" data-number="${esc(l.number)}">
+    <span class="badge" style="--c:${l.color}">${esc(l.number)}</span>
+    <span class="to">${esc(routeOf(l))}<small>${esc(status.text)}${works}</small></span>
+  </button>`;
 }
 
 function menuHTML() {
   const numbers = [...new Map(net.lines.map((l) => [l.number, l])).values()];
   const c = clock();
   const simText = c.live ? 'Mira cómo se mueven los buses en otro momento' : `Ahora ves las ${formatMinutes(Math.floor(c.t))}`;
-  const rows = numbers.map((l) => {
-    const hospital = hasWorks(l.number) ? ' · Cambios por obras' : '';
-    return `<button type="button" class="row" data-act="line" data-number="${esc(l.number)}">
-      <span class="badge" style="--c:${l.color}">${esc(l.number)}</span>
-      <span class="to">${esc(routeOf(l))}<small>${esc(shortDays(l.days))}${hospital}</small></span>
-    </button>`;
-  }).join('');
-  return `<div class="head">${BACK}<div><h1>Todas las líneas</h1><small>Toca una línea para ver su recorrido y sus paradas</small></div></div>
-    <div class="rows">${rows}</div>
+  const active = numbers.filter((l) => lineStatus(l.number).active);
+  const idle = numbers.filter((l) => !lineStatus(l.number).active);
+  const list = active.length
+    ? `<div class="rows">${active.map(lineRow).join('')}</div>`
+    : '<p class="empty">Ahora mismo no hay ningún bus en la calle.</p>';
+  const idleBlock = idle.length
+    ? `<button type="button" class="cta second" data-act="toggle-idle" aria-expanded="${state.showIdle}">${state.showIdle ? 'Ocultar líneas sin buses' : `Ver ${idle.length === 1 ? 'la línea' : `las ${idle.length} líneas`} sin buses ahora`}</button>
+       ${state.showIdle ? `<div class="rows">${idle.map(lineRow).join('')}</div>` : ''}`
+    : '';
+  return `<div class="head">${BACK}<div><h1>Líneas con buses ahora</h1><small>Toca una para ver dónde está su bus</small></div></div>
+    ${list}${idleBlock}
     <div class="rows">
       <button type="button" class="row" data-act="notices"><span class="to">Avisos del servicio</span><span class="count">${NOTICES.length}</span></button>
       <button type="button" class="row" data-act="sim"><span class="to">Ver otra hora<small>${esc(simText)}</small></span></button>
@@ -992,6 +1058,9 @@ function wire() {
       state.bellFor = null;
       renderSheet();
       toast('Aviso quitado');
+    } else if (act === 'toggle-idle') {
+      state.showIdle = !state.showIdle;
+      renderSheet();
     } else if (act === 'toggle-stops') {
       state.showStops = !state.showStops;
       renderSheet();
