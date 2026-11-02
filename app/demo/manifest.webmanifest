@@ -1,7 +1,7 @@
 {
-  "name": "Buses de Lugo",
-  "short_name": "Buses Lugo",
-  "description": "Simulación en directo de los autobuses urbanos de Lugo.",
+  "name": "Xa Vén",
+  "short_name": "Xa Vén",
+  "description": "Mira por dónde va tu bus en Lugo y cuándo llega.",
   "lang": "es",
   "start_url": "/demo/",
   "scope": "/demo/",

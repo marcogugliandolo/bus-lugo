@@ -1,4 +1,4 @@
-/* Buses de Lugo. El mapa ocupa toda la pantalla; los colores solo los ponen las líneas. */
+/* Xa Vén. El mapa ocupa toda la pantalla; los colores solo los ponen las líneas. */
 @font-face { font-family: "Atkinson Hyperlegible Next"; font-weight: 400; font-display: swap; src: url(vendor/fonts/atkinson-hyperlegible-next-latin-400-normal.woff2) format("woff2"); }
 @font-face { font-family: "Atkinson Hyperlegible Next"; font-weight: 700; font-display: swap; src: url(vendor/fonts/atkinson-hyperlegible-next-latin-700-normal.woff2) format("woff2"); }
 @font-face { font-family: "Bricolage Grotesque"; font-weight: 700; font-display: swap; src: url(vendor/fonts/bricolage-grotesque-latin-700-normal.woff2) format("woff2"); }
@@ -127,6 +127,8 @@ body:not([data-located]) #locate { display: none; }
 
 .row .more { flex: none; font-size: 26px; color: var(--mute); }
 .row strong { display: block; }
+.eyebrow { font-size: 14px; font-weight: 700; color: var(--mute); margin-bottom: -6px; }
+.theme-seg { margin-top: 8px; }
 .head h1.route { font-size: 19px; line-height: 1.2; }
 .dirs { display: flex; flex-wrap: wrap; gap: 6px; }
 .dirs button { min-height: 46px; padding: 8px 14px; border: 0; border-radius: 12px; background: var(--soft); font-size: 15px; font-weight: 700; text-align: left; }
@@ -191,6 +193,7 @@ body:not([data-located]) #locate { display: none; }
 @media (min-width: 1000px) {
   :root { --side: 408px; --sheet-h: 0px; }
   .side { position: fixed; z-index: 4; left: 0; top: 0; bottom: 0; width: var(--side); display: flex; flex-direction: column; gap: 12px; padding: 22px 24px 16px; background: var(--surface); box-shadow: 4px 0 24px var(--shadow); }
+  .eyebrow { display: none; }
   .brand { display: block; font-family: var(--display); font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
   .top { position: static; }
   .search { height: 46px; padding: 0 14px; background: var(--soft); border-radius: 12px; box-shadow: none; }

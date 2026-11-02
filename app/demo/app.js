@@ -1,4 +1,4 @@
-// Buses de Lugo /demo: mapa, panel y reloj. El cálculo de posiciones está en sim.js.
+// Xa Vén /demo: mapa, panel y reloj. El cálculo de posiciones está en sim.js.
 import { prepare, busesAt, arrivalsAt, approachPath, dayKind, formatMinutes, passTime, distanceMetres } from './sim.js';
 
 const TILES_CHECK = 'https://tiles.openfreemap.org/planet';
@@ -125,6 +125,18 @@ function syncSimPanel() {
   $('#sim-out').textContent = formatMinutes(Math.floor(c.t));
   $('#sim-live').hidden = c.live;
 }
+
+/* ---------- Tema: automático, claro u oscuro; se recuerda en este dispositivo ---------- */
+function readTheme() {
+  try { return localStorage.getItem('xaven-tema') || 'auto'; } catch { return 'auto'; }
+}
+let themeChoice = readTheme();
+function applyTheme() {
+  const root = document.documentElement;
+  if (themeChoice === 'auto') delete root.dataset.theme;
+  else root.dataset.theme = themeChoice;
+}
+applyTheme();
 
 /* ---------- Mapa ---------- */
 const isDark = () => {
@@ -469,7 +481,7 @@ function homeHTML() {
     ? `<p class="empty">Ahora mismo no hay buses en la calle.</p><button type="button" class="cta second" data-act="sim10">Ver cómo se mueven a las 10:00</button>`
     : '';
   if (!state.homeStopId) {
-    return `<div class="head"><div><h1>¿A dónde quieres ir?</h1><small>Toca un bus o una parada para saber cuándo llega</small></div></div>
+    return `<p class="eyebrow">Xa Vén · Los buses de Lugo</p><div class="head"><div><h1>¿A dónde quieres ir?</h1><small>Toca un bus o una parada para saber cuándo llega</small></div></div>
       <div class="buttons one">
         <button type="button" class="cta" data-act="near">Ver la parada más cercana</button>
         <button type="button" class="cta second" data-act="menu">Ver todas las líneas</button>
@@ -651,6 +663,11 @@ function menuHTML() {
   }).join('');
   return `<div class="head">${BACK}<div><h1>Todas las líneas</h1><small>Toca una línea para ver su recorrido y sus paradas</small></div></div>
     <div class="rows">${rows}</div>
+    <div class="rows"><h2>Apariencia</h2>
+      <div class="seg theme-seg" role="group" aria-label="Apariencia">
+        ${[['light', 'Claro'], ['dark', 'Oscuro'], ['auto', 'Auto']].map(([v, t]) => `<button type="button" data-act="theme" data-value="${v}" aria-pressed="${themeChoice === v}">${t}</button>`).join('')}
+      </div>
+    </div>
     <div class="rows">
       <button type="button" class="row" data-act="notices"><span class="to">Avisos del servicio</span><span class="count">${NOTICES.length}</span></button>
       <button type="button" class="row" data-act="sim"><span class="to">Ver otra hora<small>${esc(simText)}</small></span></button>
@@ -701,7 +718,7 @@ function checkAlert() {
   toast(text);
   try {
     if (navigator.vibrate) navigator.vibrate(200);
-    if ('Notification' in window && Notification.permission === 'granted') new Notification('Buses de Lugo', { body: text });
+    if ('Notification' in window && Notification.permission === 'granted') new Notification('Xa Vén', { body: text });
   } catch { /* el aviso en pantalla ya está dado */ }
 }
 
@@ -774,6 +791,7 @@ function selectLine(number) {
   const onRoad = state.buses.some((b) => b.line.number === number);
   const points = net.lines.filter((l) => l.number === number).flatMap((l) => l.dirs.flatMap((d) => d.path));
   requestAnimationFrame(() => (onRoad ? followCamera(700) : moveTo(points, 15)));
+  if (onRoad) setTimeout(() => followCamera(500), 800);
 }
 
 function goHome() {
@@ -838,6 +856,12 @@ function wire() {
     else if (act === 'line') selectLine(t.dataset.number);
     else if (act === 'follow') selectBus(t.dataset.key);
     else if (act === 'notices') go('notices');
+    else if (act === 'theme') {
+      themeChoice = t.dataset.value;
+      try { localStorage.setItem('xaven-tema', themeChoice); } catch { /* se aplica solo a esta visita */ }
+      applyTheme();
+      renderSheet();
+    }
     else if (act === 'line-dir') {
       state.lineDir = Number(t.dataset.index);
       state.follow = false;

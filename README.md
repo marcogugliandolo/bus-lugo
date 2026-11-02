@@ -1,4 +1,7 @@
-# Buses de Lugo
+# Xa Vén
+
+«Xa vén» significa «ya viene» en gallego.
+
 
 Simulación en directo de los autobuses urbanos de Lugo, con sus 24 líneas, 417 paradas y horarios oficiales. Funciona en móvil, tablet y ordenador.
 
