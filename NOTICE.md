@@ -17,3 +17,4 @@ Proyecto no oficial, sin relación con AULUSA, Grupo Monbus ni el Concello de Lu
 
 - [MapLibre GL JS](https://maplibre.org): BSD-3-Clause, en `app/demo/vendor/maplibre-LICENSE.txt`.
 - Atkinson Hyperlegible Next y Bricolage Grotesque: SIL Open Font License, en `app/demo/vendor/fonts/`.
+- **Búsqueda de sitios:** [Photon](https://photon.komoot.io/), con datos de OpenStreetMap.

@@ -56,3 +56,7 @@ Licencias y procedencia de los datos en [NOTICE.md](NOTICE.md).
 El servicio `server/push.mjs` (contenedor `bus-lugo-push`) guarda los avisos y envía la notificación a su hora con Web Push, aunque la web esté cerrada. Crea sus claves la primera vez en el volumen `bus-lugo-avisos`, así que no hay nada que configurar ni secretos en el repositorio. Pruebas: `cd server && npm install && node --test`.
 
 En iPhone las notificaciones web solo funcionan si la web se añade a la pantalla de inicio y se abre desde allí.
+
+## Cómo llegar
+
+`app/demo/plan.js` calcula el viaje entre dos puntos con los horarios: andando, en un bus o con un transbordo. Los sitios y calles se buscan con Photon, sobre datos de OpenStreetMap. Comprobación: `node tools/check-plan.mjs`.
