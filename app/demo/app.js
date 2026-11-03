@@ -238,6 +238,9 @@ function addOverlays() {
   mapReady = true;
   applyMapTheme();
   updateApproach();
+  updatePlanMap();
+  updatePins();
+  updateMarkers();
 }
 
 async function initMap() {
