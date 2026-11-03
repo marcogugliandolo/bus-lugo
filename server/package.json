@@ -1,0 +1,9 @@
+{
+  "name": "bus-lugo-avisos",
+  "private": true,
+  "type": "module",
+  "main": "push.mjs",
+  "dependencies": {
+    "web-push": "3.6.7"
+  }
+}

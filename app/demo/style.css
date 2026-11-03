@@ -104,8 +104,7 @@ body:not([data-located]) #locate { display: none; }
 .row-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; min-height: 56px; padding: 8px 0; border: 0; background: transparent; text-align: left; }
 .bell { flex: none; display: flex; align-items: center; justify-content: center; gap: 5px; min-width: 40px; height: 40px; padding: 0 8px; border: 0; border-radius: 20px; background: var(--soft); color: var(--ink); font-size: 14px; font-weight: 700; white-space: nowrap; }
 .bell.on { background: #FFC53D; color: #121416; }
-.bell.wide { align-self: center; margin-left: auto; height: 40px; padding: 0 14px 0 10px; }
-.bell-hint { margin-top: 2px; font-size: 13px; line-height: 1.3; color: var(--mute); }
+.bell-hint { margin-top: -8px; font-size: 13px; line-height: 1.3; color: var(--mute); }
 .maplibregl-marker:has(.pin) { z-index: 5; }
 .bell-opts { display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: var(--soft); }
 .bell-opts p { font-size: 14px; font-weight: 700; }
@@ -124,9 +123,7 @@ body:not([data-located]) #locate { display: none; }
 
 .hero { display: flex; flex-direction: column; gap: 16px; }
 .hero-time .bignum { font-family: var(--display); font-size: 30px; font-weight: 700; line-height: 1; letter-spacing: -.02em; color: var(--ink); font-variant-numeric: tabular-nums; }
-.hero-line { display: flex; align-items: center; gap: 10px; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; }
 .wait-note { margin-top: -8px; font-size: 14px; line-height: 1.3; color: var(--mute); }
-.hero-line .hacia { flex: 1; min-width: 0; }
 .hero-time { display: flex; align-items: baseline; gap: 10px; font-size: 15px; color: var(--mute); }
 .hacia { font-size: 16px; line-height: 1.3; }
 .cta { flex: none; width: 100%; min-height: 46px; padding: 8px 14px; border: 0; border-radius: 12px; background: var(--ink); color: var(--on-ink); font-size: 15px; font-weight: 700; }
@@ -173,6 +170,7 @@ body:not([data-located]) #locate { display: none; }
 .tl li.bus-now .rail::after, .tl li.here .rail::after { left: -3px; top: -1px; width: 22px; height: 22px; border: 0; background: var(--c, var(--ink)) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23fff' fill-rule='evenodd' d='M6 3h12a2 2 0 0 1 2 2v12a2 2 0 0 1-1 1.7V20a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-1H8v1a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-1.3A2 2 0 0 1 4 17V5a2 2 0 0 1 2-2zm0 3v6h12V6zm1.5 8.5a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4zm9 0a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4z'/%3E%3C/svg%3E") center / 14px no-repeat; box-shadow: 0 0 0 3px var(--surface); }
 .tl li.gap .rail::before { background: repeating-linear-gradient(to bottom, var(--c, var(--ink)) 0 4px, transparent 4px 9px); }
 .tl li.gap .rail::after { display: none; }
+.tl li.gap.before .rail::before { background: repeating-linear-gradient(to bottom, var(--grab) 0 4px, transparent 4px 9px); }
 .tl li.past + li:not(.bus-now) .rail::before { background: var(--c, var(--ink)); }
 .tl li.past { color: var(--mute); }
 .tl li.you { min-height: 48px; font-size: 15px; font-weight: 700; }

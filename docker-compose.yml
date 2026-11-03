@@ -9,6 +9,9 @@
 # En NPM: bus.marcogugliandolo.com -> http://bus-lugo:3000
 # La ubicación del móvil solo funciona con https.
 #
+# El servicio bus-lugo-push envía los avisos al móvil. No publica ningún puerto y crea
+# sus claves la primera vez en el volumen bus-lugo-avisos; no hay que configurar nada.
+#
 # Variables opcionales (Portainer > Environment variables):
 #   BUS_PORT      puerto del servidor (por defecto 3091)
 #   BUS_REPO      usuario/repositorio (por defecto marcogugliandolo/bus-lugo)
@@ -26,6 +29,7 @@ services:
       - "${BUS_PORT:-3091}:3000"
     networks:
       - npm
+      - interno
     environment:
       REPO: ${BUS_REPO:-marcogugliandolo/bus-lugo}
       BRANCH: ${BUS_BRANCH:-main}
@@ -78,7 +82,68 @@ services:
       retries: 3
       start_period: 30s
 
+  bus-lugo-push:
+    image: node:22-alpine
+    container_name: bus-lugo-push
+    restart: unless-stopped
+    stop_signal: SIGTERM
+    stop_grace_period: 5s
+    init: true
+    networks:
+      - interno
+    volumes:
+      - bus-lugo-avisos:/data
+    environment:
+      REPO: ${BUS_REPO:-marcogugliandolo/bus-lugo}
+      BRANCH: ${BUS_BRANCH:-main}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      DATA_DIR: /data
+      PUSH_SUBJECT: https://bus.marcogugliandolo.com
+      TZ: Europe/Madrid
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        APP=/srv/avisos
+        TMP=/tmp/bus-lugo
+        rm -rf "$$TMP" && mkdir -p "$$TMP" "$$APP"
+
+        fetch() {
+          if [ -n "$$GITHUB_TOKEN" ]; then
+            wget -q -T 30 --header "Authorization: Bearer $$GITHUB_TOKEN" \
+              -O "$$TMP/src.tgz" "https://api.github.com/repos/$$REPO/tarball/$$BRANCH"
+          else
+            wget -q -T 30 -O "$$TMP/src.tgz" \
+              "https://codeload.github.com/$$REPO/tar.gz/refs/heads/$$BRANCH"
+          fi
+        }
+
+        if fetch && tar -xzf "$$TMP/src.tgz" -C "$$TMP"; then
+          SRC=$$(find "$$TMP" -mindepth 1 -maxdepth 1 -type d | head -n 1)
+          if [ -f "$$SRC/server/push.mjs" ]; then
+            cp -r "$$SRC/server/." "$$APP/"
+          fi
+        fi
+        rm -rf "$$TMP"
+        cd "$$APP" || exit 1
+        if [ ! -f push.mjs ]; then
+          echo "[avisos] no hay copia del servicio; reintento en 15 s"
+          sleep 15
+          exit 1
+        fi
+        npm ci --omit=dev --no-audit --no-fund || npm install --omit=dev --no-audit --no-fund || { sleep 15; exit 1; }
+        exec node push.mjs
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3001/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 90s
+
 networks:
   npm:
     external: true
     name: npm-master_default
+  interno:
+
+volumes:
+  bus-lugo-avisos:

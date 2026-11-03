@@ -181,7 +181,8 @@ function applyMapTheme() {
   for (const [id, paint] of Object.entries(themeTable[themeName()])) {
     for (const [key, value] of Object.entries(paint)) map.setPaintProperty(id, key, value);
   }
-  map.setPaintProperty('approach', 'line-color', token('--ink'));
+  map.setPaintProperty('route-dots', 'circle-color', token('--surface'));
+  map.setPaintProperty('route-dots', 'circle-stroke-color', ['case', ['get', 'past'], token('--grab'), ['get', 'color']]);
   map.setPaintProperty('bus-stops', 'circle-color', token('--surface'));
   map.setPaintProperty('bus-stops', 'circle-stroke-color', token('--mute'));
   applyMapFocus();
@@ -216,12 +217,15 @@ function addOverlays() {
   map.addSource('bus-stops', { type: 'geojson', data: stopsData });
   map.addSource('focus', { type: 'geojson', data: empty });
   map.addSource('approach', { type: 'geojson', data: empty });
+  map.addSource('route-dots', { type: 'geojson', data: empty });
   const round = { 'line-cap': 'round', 'line-join': 'round' };
   map.addLayer({ id: 'routes', type: 'line', source: 'routes', layout: round, paint: { 'line-color': ['get', 'color'], 'line-opacity': 0.34, 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 1, 15, 2.4, 18, 5] } });
   map.addLayer({ id: 'route-sel', type: 'line', source: 'routes', layout: round, filter: ['==', ['get', 'number'], ''], paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 3, 15, 5, 18, 8] } });
-  map.addLayer({ id: 'focus', type: 'line', source: 'focus', layout: round, paint: { 'line-color': ['get', 'color'], 'line-opacity': 0.7, 'line-width': 4 } });
-  map.addLayer({ id: 'approach', type: 'line', source: 'approach', layout: round, paint: { 'line-color': token('--ink'), 'line-width': 6 } });
+  map.addLayer({ id: 'focus', type: 'line', source: 'focus', layout: round, paint: { 'line-color': ['get', 'color'], 'line-opacity': 0.35, 'line-width': 5 } });
+  map.addLayer({ id: 'approach', type: 'line', source: 'approach', layout: round, paint: { 'line-color': ['get', 'color'], 'line-width': 5 } });
   map.addLayer({ id: 'bus-stops', type: 'circle', source: 'bus-stops', minzoom: 14.6, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 14.6, 2.6, 16, 4.5], 'circle-color': token('--surface'), 'circle-stroke-color': token('--mute'), 'circle-stroke-width': 1.2 } });
+  map.addLayer({ id: 'route-dots', type: 'circle', source: 'route-dots', paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 12, 2.5, 16, 5, 18, 7], 'circle-color': token('--surface'), 'circle-stroke-color': ['case', ['get', 'past'], token('--grab'), ['get', 'color']], 'circle-stroke-width': ['interpolate', ['linear'], ['zoom'], 12, 1.5, 16, 2.5] } });
+  shownDots = '';
   mapReady = true;
   applyMapTheme();
   updateApproach();
@@ -307,7 +311,7 @@ function applyMapFocus() {
   map.setPaintProperty('routes', 'line-opacity', alone || state.view === 'stop' ? 0 : (isDark() ? 0.42 : 0.34));
   let ids = null;
   if (state.view === 'line') ids = net.lines.filter((l) => l.number === state.lineNumber).flatMap((l) => l.dirs.flatMap((d) => d.stops));
-  if (state.view === 'bus') ids = (state.busByKey.get(state.busKey)?.dir ?? state.wait?.dir)?.stops ?? null;
+  if (state.view === 'bus') ids = (state.busByKey.get(state.busKey)?.dir ?? state.wait?.dir)?.stops ?? [];
   map.setFilter('bus-stops', ids ? ['in', ['get', 'id'], ['literal', [...new Set(ids)]]] : null);
   map.setFilter('route-sel', ['==', ['get', 'number'], state.view === 'line' ? state.lineNumber : '']);
 }
@@ -332,10 +336,6 @@ function busMarker(bus) {
 
 function heroBusKey() {
   if (state.view === 'bus') return state.busKey;
-  if (state.view === 'stop') {
-    const hero = currentHero();
-    if (hero) return state.busByKey.has(hero.key) ? hero.key : companionOf(hero)?.key ?? null;
-  }
   return null;
 }
 
@@ -364,6 +364,8 @@ function companionOf(a) {
 }
 
 /** Mantiene en pantalla el bus o los buses elegidos hasta que la persona mueva el mapa. */
+const BUS_ZOOM = 16.6;
+
 function followCamera(duration = 900) {
   if (!state.follow || !map) return;
   if (state.view === 'line') {
@@ -373,27 +375,21 @@ function followCamera(duration = 900) {
     if (list.length) moveTo(list.map((b) => [b.lat, b.lng]), 15.8, duration);
   } else if (state.view === 'bus') {
     const bus = state.busByKey.get(state.busKey);
-    if (!bus) {
-      if (state.wait) {
-        const here = net.stopById.get(state.wait.stopId);
-        const first = net.stopById.get(state.wait.dir.stops[0]);
-        moveTo([[here.lat, here.lng], [first.lat, first.lng]], 15.8, duration);
-      }
-      return;
+    if (bus) {
+      const next = net.stopById.get(bus.dir.stops[bus.nextStopIndex]);
+      moveTo(next && !bus.stopped ? [[bus.lat, bus.lng], [next.lat, next.lng]] : [[bus.lat, bus.lng]], BUS_ZOOM, duration);
     }
-    const points = [[bus.lat, bus.lng]];
-    const i = state.stopId ? bus.dir.stops.indexOf(state.stopId) : -1;
-    if (state.wait || i >= bus.nextStopIndex) {
-      const stop = net.stopById.get(state.stopId);
-      points.push([stop.lat, stop.lng]);
+    else if (state.wait) {
+      const first = net.stopById.get(state.wait.dir.stops[0]);
+      moveTo([[first.lat, first.lng]], BUS_ZOOM, duration);
     }
-    moveTo(points, 15.8, duration);
   }
 }
 
 function updateMarkers() {
   if (!map) return;
   const hero = heroBusKey();
+  const coming = state.view === 'stop' ? new Set(arrivalsFor(state.stopId).map((a) => a.key)) : null;
   const seen = new Set();
   for (const bus of state.buses) {
     seen.add(bus.key);
@@ -413,7 +409,7 @@ function updateMarkers() {
     }
     const inLine = state.view === 'line' && bus.line.number === state.lineNumber;
     const isHero = bus.key === hero || (inLine && !bus.parkedUntil);
-    const filtered = (state.view === 'line' && !inLine) || (state.view === 'bus' && bus.key !== state.busKey) || (state.view === 'stop' && !isHero);
+    const filtered = (state.view === 'line' && !inLine) || (state.view === 'bus' && bus.key !== state.busKey) || (state.view === 'stop' && !coming.has(bus.key));
     const dimmed = Boolean(hero) && !isHero;
     const parked = Boolean(bus.parkedUntil);
     const look = `${isHero}|${filtered}|${dimmed}|${parked}`;
@@ -558,8 +554,27 @@ function updatePins() {
 }
 
 let shownFocus = null;
+let shownDots = '';
+
+/** Las paradas del recorrido como puntos: en gris las que el bus ya ha pasado. */
+function updateDots() {
+  const bus = state.view === 'bus' ? state.busByKey.get(state.busKey) : null;
+  const dir = bus?.dir ?? (state.view === 'bus' ? state.wait?.dir : null);
+  const line = bus?.line ?? state.wait?.line;
+  const next = bus ? bus.nextStopIndex : 0;
+  const key = dir ? `${state.busKey}|${next}` : '';
+  if (key === shownDots) return;
+  shownDots = key;
+  const features = (dir?.stops ?? []).map((id, i) => {
+    const stop = net.stopById.get(id);
+    return { type: 'Feature', properties: { past: i < next, color: line.color }, geometry: { type: 'Point', coordinates: [stop.lng, stop.lat] } };
+  });
+  map.getSource('route-dots')?.setData({ type: 'FeatureCollection', features });
+}
+
 function updateApproach() {
   if (!mapReady) return;
+  updateDots();
   const empty = { type: 'FeatureCollection', features: [] };
   const key = heroBusKey();
   const bus = key ? state.busByKey.get(key) : null;
@@ -579,13 +594,8 @@ function updateApproach() {
     shownFocus = bus.dir;
     focusSrc.setData(asLine(bus.dir.path, { color: bus.line.color }));
   }
-  let target = bus.dir.stops.length - 1;
-  if (state.stopId) {
-    const i = bus.dir.stops.indexOf(state.stopId);
-    if (i >= bus.nextStopIndex) target = i;
-  }
-  const path = approachPath(bus, target);
-  approachSrc.setData(path.length > 1 ? asLine(path) : empty);
+  const path = approachPath(bus, bus.dir.stops.length - 1);
+  approachSrc.setData(path.length > 1 ? asLine(path, { color: bus.line.color }) : empty);
 }
 
 /* ---------- Panel ---------- */
@@ -597,13 +607,82 @@ const MAP_CREDIT = 'Mapa: OpenFreeMap © OpenMapTiles. Datos © OpenStreetMap.';
 const BELL = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>';
 const ALERT_OPTIONS = [2, 5, 10];
 
-function bellButton(a, { wide = false } = {}) {
+function bellButton(a) {
   const armed = state.alerts.find((x) => x.key === a.key && x.stopId === a.stopId);
   const left = a.minutes - clock().t;
   if (!armed && left <= ALERT_OPTIONS[0]) return '';
   const label = armed ? `Aviso ${armed.before} minutos antes. Cambiar` : 'Avísame antes de que llegue';
-  const text = armed ? `<span>${armed.before} min${wide ? ' antes' : ''}</span>` : wide ? '<span>Avísame</span>' : '';
-  return `<button type="button" class="bell${armed ? ' on' : ''}${wide ? ' wide' : ''}" data-act="bell" data-key="${esc(a.key)}" data-stop="${esc(a.stopId)}" aria-label="${label}" aria-expanded="${state.bellFor === a.key}">${BELL}${text}</button>`;
+  const text = armed ? `<span>${armed.before} min</span>` : '';
+  return `<button type="button" class="bell${armed ? ' on' : ''}" data-act="bell" data-key="${esc(a.key)}" data-stop="${esc(a.stopId)}" aria-label="${label}" aria-expanded="${state.bellFor === a.key}">${BELL}${text}</button>`;
+}
+
+const canPush = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const isIOS = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+function alertHelp() {
+  if (!clock().live) return 'En la simulación, el aviso solo sale en esta pantalla.';
+  if (canPush()) return 'Te llegará como notificación al móvil, aunque cierres la web. El navegador te pedirá permiso.';
+  if (isIOS()) return 'En iPhone, añade Xa Vén a la pantalla de inicio (Compartir › Añadir a inicio) y ábrela desde allí para recibir avisos. Si no, deja esta pantalla abierta.';
+  return 'Este navegador no admite notificaciones: deja esta pantalla abierta para recibir el aviso.';
+}
+
+function saveAlerts() {
+  try { localStorage.setItem('xaven-avisos', JSON.stringify(state.alerts)); } catch { /* solo dura esta visita */ }
+}
+
+function loadAlerts() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('xaven-avisos') ?? '[]');
+    state.alerts = Array.isArray(saved) ? saved.filter((a) => a.at > Date.now()) : [];
+  } catch { state.alerts = []; }
+}
+
+const urlKey = (text) => Uint8Array.from(atob(text.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(text.length / 4) * 4, '=')), (c) => c.charCodeAt(0));
+
+/** Pide permiso y prepara el móvil para recibir avisos. Devuelve la suscripción o el motivo de que no haya. */
+async function phoneSubscription() {
+  if (!clock().live || !canPush()) return { reason: 'none' };
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') return { reason: 'denied' };
+  await navigator.serviceWorker.register('sw.js');
+  const registration = await navigator.serviceWorker.ready;
+  let subscription = await registration.pushManager.getSubscription();
+  if (!subscription) {
+    const { key } = await fetch('/api/avisos/clave').then((r) => { if (!r.ok) throw new Error('sin servicio'); return r.json(); });
+    subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlKey(key) });
+  }
+  return { subscription: subscription.toJSON() };
+}
+
+/** Programa el aviso en el servidor para que llegue aunque la web esté cerrada. */
+async function schedulePush(alert, arrival) {
+  try {
+    const { subscription, reason } = await phoneSubscription();
+    if (!subscription) return reason;
+    const res = await fetch('/api/avisos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        id: alert.id,
+        at: alert.at,
+        subscription,
+        title: `Línea ${alert.number}: llega en ${alert.before} min`,
+        body: `Hacia ${nice(arrival.dir.dest)}. Parada ${nice(alert.name)}, a las ${arrival.time}.`.slice(0, 200),
+        url: `/demo/#${alert.stopId}`,
+      }),
+    });
+    if (!res.ok) throw new Error(`servicio ${res.status}`);
+    alert.pushed = true;
+    saveAlerts();
+    return 'ok';
+  } catch (err) {
+    console.warn('Aviso:', err?.message);
+    return 'error';
+  }
+}
+
+function cancelPush(alert) {
+  if (alert?.pushed) fetch(`/api/avisos/${alert.id}`, { method: 'DELETE' }).catch(() => {});
 }
 
 function bellChooser(a) {
@@ -614,14 +693,14 @@ function bellChooser(a) {
   return `<div class="bell-opts"><p>¿Cuánto antes te avisamos?</p><div class="bell-row">
     ${options.map((n) => `<button type="button" data-act="bell-set" data-key="${esc(a.key)}" data-stop="${esc(a.stopId)}" data-before="${n}" aria-pressed="${armed?.before === n}">${n} min</button>`).join('')}
     ${armed ? `<button type="button" class="off" data-act="bell-off" data-key="${esc(a.key)}" data-stop="${esc(a.stopId)}">Quitar</button>` : ''}
-  </div><small>Deja esta pantalla abierta para recibir el aviso.</small></div>`;
+  </div><small>${alertHelp()}</small></div>`;
 }
 
 function arrivalRow(a) {
   return `<div class="row arr">
     <button type="button" class="row-main" data-act="arrival" data-key="${esc(a.key)}" data-stop="${esc(a.stopId)}">
       <span class="badge" style="--c:${a.line.color}">${esc(a.line.number)}</span>
-      <span class="to">${esc(nice(a.dir.dest))}<small>a las ${a.time}</small></span>
+      <span class="to">${esc(nice(a.dir.dest))}<small>a las ${a.time}${a.later ? ` · luego ${a.later}` : ''}</small></span>
       <span class="eta">${minutesHTML(a.eta)}</span>
     </button>${bellButton(a)}
   </div>${bellChooser(a)}`;
@@ -676,6 +755,10 @@ function stripHTML(bus, { target = null, full = false } = {}) {
     return `<li class="${cls}"><time>${formatMinutes(passTime(svc, bus.run, i))}</time><span class="rail"></span><span>${esc(name)}${note}</span></li>`;
   };
   let html = '';
+  if (full) {
+    const before = bus.stopped ? next : next - 1;
+    if (before > 0) html += `<li class="gap before"><time></time><span class="rail"></span><span>${before === 1 ? '1 parada anterior' : `${before} paradas anteriores`}</span></li>`;
+  }
   if (next > 0 && !bus.stopped) html += row(next - 1, 'past');
   if (!bus.stopped) html += '<li class="bus-now"><time>Ahora</time><span class="rail"></span><span>El bus va por aquí</span></li>';
   for (const i of shown) {
@@ -715,12 +798,6 @@ function arrivalsFor(stopId) {
   return arrivalsAt(net, stopId, c.kind, c.t).map((a) => ({ ...a, stopId }));
 }
 
-function currentHero() {
-  if (!state.stopId) return null;
-  const list = arrivalsFor(state.stopId);
-  return list.find((a) => a.key === state.arrivalKey) ?? list[0] ?? null;
-}
-
 function homeHTML() {
   const c = clock();
   const wake = !state.buses.length && c.live
@@ -745,43 +822,26 @@ function homeHTML() {
 
 const nowCardWithNote = ({ card, note }) => `${card}${note ? `<p class="wait-note">${esc(note)}</p>` : ''}`;
 
+/** Una fila por línea y sentido, con su próximo paso y el siguiente. */
+function nextPerLine(list) {
+  const rows = new Map();
+  for (const a of list) {
+    const key = `${a.line.id}|${a.dirIndex}`;
+    if (rows.has(key)) rows.get(key).later ??= a.time;
+    else rows.set(key, { ...a, later: null });
+  }
+  return [...rows.values()];
+}
+
 function stopHTML() {
   const stop = net.stopById.get(state.stopId);
-  const list = arrivalsFor(stop.id);
-  const hero = list.find((a) => a.key === state.arrivalKey) ?? list[0];
+  const rows = nextPerLine(arrivalsFor(stop.id));
   const sub = stop.code ? `Código de parada: ${esc(stop.code)}` : 'Parada';
   const head = `<div class="head">${BACK}<div><h1>${esc(nice(stop.name))}</h1><small>${sub}</small></div></div>`;
-  if (!hero) return `${head}<p class="empty">No pasa ningún bus por aquí en las próximas dos horas.</p>${FOOT}`;
-  const bus = state.busByKey.get(hero.key);
-  const big = hero.eta === 0 ? 'Ya llega' : `${hero.eta} min`;
-  let card;
-  if (bus) {
-    const left = Math.max(0, hero.stopIndex - bus.nextStopIndex);
-    const where = whereNow(bus);
-    let detail;
-    if (left === 0) detail = where.phase === 'at' ? 'Está en esta parada' : 'Esta parada es la siguiente';
-    else detail = left === 1 ? 'Le falta 1 parada para llegar aquí' : `Le faltan ${left} paradas para llegar aquí`;
-    card = nowCard(where.label, where.place, detail, hero.key);
-  } else {
-    const wait = waitCard(hero, true);
-    card = nowCardWithNote(wait);
-  }
-  const later = list.filter((a) => a.key !== hero.key).slice(0, 5);
+  if (!rows.length) return `${head}<p class="empty">No pasa ningún bus por aquí en las próximas dos horas.</p>${FOOT}`;
   return `${head}
-    <div class="stop-grid">
-      <div class="hero">
-        <button type="button" class="hero-line" data-act="arrival" data-key="${esc(hero.key)}" data-stop="${esc(hero.stopId)}" aria-label="${esc(`Línea ${hero.line.number} hacia ${nice(hero.dir.dest)}. Ver dónde está el bus`)}">
-          <span class="badge big" style="--c:${hero.line.color}">${esc(hero.line.number)}</span>
-          <span class="hacia">Hacia <strong>${esc(nice(hero.dir.dest))}</strong></span>
-          <span class="now-go" aria-hidden="true">›</span>
-        </button>
-        <div class="hero-time"><span class="bignum">${big}</span><span>a las ${hero.time}</span>${bellButton(hero, { wide: true })}</div>
-        ${bellChooser(hero)}
-        ${card}
-        ${bus ? stripHTML(bus, { target: hero.stopIndex }) : ''}
-      </div>
-      <div class="rows"><h2>Después pasan</h2>${later.length ? '<p class="bell-hint">Toca una línea para ver dónde está su bus. La campana te avisa antes de que llegue.</p>' : ''}${later.length ? later.map((a) => arrivalRow(a)).join('') : '<p class="empty">No hay más buses en las próximas dos horas.</p>'}</div>
-    </div>${FOOT}`;
+    <div class="rows"><h2>Toca una línea para ver dónde está su bus</h2>${rows.map((a) => arrivalRow(a)).join('')}</div>
+    <p class="bell-hint">La campana te avisa antes de que llegue.</p>${FOOT}`;
 }
 
 function waitHTML() {
@@ -793,7 +853,7 @@ function waitHTML() {
     <p class="card-title">Dónde está ahora</p>
     ${nowCardWithNote(wait)}
     <div class="hero-time"><span class="bignum">${eta === 0 ? 'Ya llega' : `${eta} min`}</span><span>llega a ${esc(nice(stop.name))} a las ${a.time}</span></div>
-    ${wait.bus && !wait.bus.parkedUntil ? stripHTML(wait.bus) : ''}${FOOT}`;
+    ${wait.bus && !wait.bus.parkedUntil ? `<div class="rows"><h2>Su recorrido</h2></div>${stripHTML(wait.bus, { full: true })}` : ''}${FOOT}`;
 }
 
 function busHTML() {
@@ -987,6 +1047,7 @@ function renderClock() {
 function checkAlert() {
   if (!state.alerts.length) return;
   const c = clock();
+  const before = state.alerts.length;
   state.alerts = state.alerts.filter((alert) => {
     const a = arrivalsFor(alert.stopId).find((x) => x.key === alert.key);
     if (!a) return false;
@@ -995,10 +1056,10 @@ function checkAlert() {
     toast(text);
     try {
       if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-      if ('Notification' in window && Notification.permission === 'granted') new Notification('Xa Vén', { body: text, icon: 'icon-192.png' });
     } catch { /* el aviso en pantalla ya está dado */ }
     return false;
   });
+  if (state.alerts.length !== before) saveAlerts();
 }
 
 let toastTimer = 0;
@@ -1047,14 +1108,7 @@ function selectStop(id, keepArrival = false) {
 
 function focusHero() {
   const stop = net.stopById.get(state.stopId);
-  const hero = currentHero();
-  const bus = hero ? state.busByKey.get(hero.key) : null;
-  const other = hero && !bus ? companionOf(hero) : null;
-  requestAnimationFrame(() => {
-    if (bus) moveTo([[stop.lat, stop.lng], ...approachPath(bus, hero.stopIndex)]);
-    else if (other) moveTo([[stop.lat, stop.lng], [other.lat, other.lng]], 15.5);
-    else moveTo([[stop.lat, stop.lng]], 15.5);
-  });
+  requestAnimationFrame(() => moveTo([[stop.lat, stop.lng]], 15.8));
 }
 
 /** Al tocar una línea en una parada: lleva al bus de esa línea, esté donde esté. */
@@ -1183,16 +1237,24 @@ function wire() {
       const stop = net.stopById.get(stopId);
       const line = net.lineById.get(key.split('|')[0]);
       const before = Number(t.dataset.before);
+      const arrival = arrivalsFor(stopId).find((x) => x.key === key);
+      if (!arrival) return;
+      cancelPush(state.alerts.find((x) => x.key === key && x.stopId === stopId));
+      const alert = { id: crypto.randomUUID(), key, stopId, name: stop.name, number: line.number, before, at: Date.now() + (arrival.minutes - before - clock().t) * 60000, pushed: false };
       state.alerts = state.alerts.filter((x) => !(x.key === key && x.stopId === stopId));
-      state.alerts.push({ key, stopId, name: stop.name, number: line.number, before });
+      state.alerts.push(alert);
+      saveAlerts();
       state.bellFor = null;
       renderSheet();
-      toast(`Te avisaremos ${before} minutos antes de que llegue`);
-      try {
-        if ('Notification' in window && Notification.permission === 'default') await Notification.requestPermission();
-      } catch { /* sin permiso, queda el aviso en pantalla */ }
+      const result = await schedulePush(alert, arrival);
+      if (result === 'ok') toast(`Listo. Te avisaremos en el móvil ${before} min antes, aunque cierres la web`);
+      else if (result === 'denied') toast('Las notificaciones están bloqueadas: solo te avisaremos con esta pantalla abierta');
+      else if (result === 'error') toast('No se pudo programar en el móvil: deja esta pantalla abierta para recibir el aviso');
+      else toast(`Te avisaremos ${before} min antes. Deja esta pantalla abierta`);
     } else if (act === 'bell-off') {
+      cancelPush(state.alerts.find((x) => x.key === t.dataset.key && x.stopId === t.dataset.stop));
       state.alerts = state.alerts.filter((x) => !(x.key === t.dataset.key && x.stopId === t.dataset.stop));
+      saveAlerts();
       state.bellFor = null;
       renderSheet();
       toast('Aviso quitado');
@@ -1221,6 +1283,7 @@ function wire() {
   $('#theme').addEventListener('click', () => setTheme(isDark() ? 'light' : 'dark'));
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', paintThemeButton);
   paintThemeButton();
+  loadAlerts();
   $('#zoom-in').addEventListener('click', () => { state.follow = false; map?.zoomIn(); });
   $('#zoom-out').addEventListener('click', () => { state.follow = false; map?.zoomOut(); });
   $('#clock').addEventListener('click', () => { if (sim.on) go('sim'); });

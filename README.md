@@ -50,3 +50,9 @@ docker-compose.yml               stack para Portainer
 ```
 
 Licencias y procedencia de los datos en [NOTICE.md](NOTICE.md).
+
+## Avisos al móvil
+
+El servicio `server/push.mjs` (contenedor `bus-lugo-push`) guarda los avisos y envía la notificación a su hora con Web Push, aunque la web esté cerrada. Crea sus claves la primera vez en el volumen `bus-lugo-avisos`, así que no hay nada que configurar ni secretos en el repositorio. Pruebas: `cd server && npm install && node --test`.
+
+En iPhone las notificaciones web solo funcionan si la web se añade a la pantalla de inicio y se abre desde allí.
