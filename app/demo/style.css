@@ -76,11 +76,13 @@ body:not([data-located]) #locate { display: none; }
 .zoom { display: none; }
 
 /* Panel inferior */
-#sheet { position: fixed; z-index: 4; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; max-height: 62dvh; padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--surface); border-radius: 22px 22px 0 0; box-shadow: 0 -6px 24px var(--shadow); }
+#sheet { --sheet-room: calc(var(--vvh, 100dvh) - 68px - env(safe-area-inset-top, 0px)); position: fixed; z-index: 4; left: 0; right: 0; bottom: var(--kb, 0px); display: flex; flex-direction: column; max-height: min(62dvh, var(--sheet-room)); padding-bottom: env(safe-area-inset-bottom, 0px); background: var(--surface); border-radius: 22px 22px 0 0; box-shadow: 0 -6px 24px var(--shadow); }
 #sheet[data-size="peek"] { max-height: 112px; }
 #sheet.dragging { will-change: transform; user-select: none; -webkit-user-select: none; }
 #sheet.settling { will-change: transform; transition: transform .22s cubic-bezier(.22, .8, .3, 1); }
-#sheet[data-size="tall"] { max-height: 88dvh; }
+#sheet[data-size="tall"] { max-height: var(--sheet-room); }
+/* Buscando, el panel ocupa siempre lo mismo y deja ver el buscador, haya pocos o muchos resultados */
+body[data-view="search"] #sheet[data-size="tall"], body[data-view="plan"] #sheet[data-size="tall"] { height: var(--sheet-room); }
 #grab { flex: none; display: grid; place-items: center; width: 100%; height: 32px; cursor: grab; padding: 0; border: 0; background: transparent; touch-action: none; }
 #grab span { width: 40px; height: 4px; border-radius: 2px; background: var(--grab); }
 #sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 max(20px, env(safe-area-inset-right, 0px)) 12px max(20px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 16px; }
@@ -238,14 +240,18 @@ body:not([data-located]) #locate { display: none; }
 @media (min-width: 640px) and (max-width: 999.98px) {
   .top { left: max(24px, calc(50% - 300px)); right: max(24px, calc(50% - 300px)); top: calc(20px + env(safe-area-inset-top, 0px)); }
   #clock { right: max(24px, calc(50% - 300px)); top: calc(72px + env(safe-area-inset-top, 0px)); }
-  #sheet { left: max(24px, calc(50% - 300px)); right: max(24px, calc(50% - 300px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); padding-bottom: 0; border-radius: 22px; max-height: 44dvh; }
-  #sheet[data-size="tall"] { max-height: 76dvh; }
+  #sheet { left: max(24px, calc(50% - 300px)); right: max(24px, calc(50% - 300px)); bottom: calc(24px + env(safe-area-inset-bottom, 0px) + var(--kb, 0px)); padding-bottom: 0; border-radius: 22px; --sheet-room: calc(var(--vvh, 100dvh) - 100px - env(safe-area-inset-top, 0px)); max-height: min(44dvh, var(--sheet-room)); }
+  #sheet[data-size="tall"] { max-height: min(76dvh, var(--sheet-room)); }
+  body[data-view="search"] #sheet[data-size="tall"], body[data-view="plan"] #sheet[data-size="tall"] { height: min(76dvh, var(--sheet-room)); }
   #locate { right: 24px; bottom: calc(var(--sheet-h) + 64px); }
   .stop-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
   #credit { right: 24px; bottom: calc(var(--sheet-h) + 34px); }
   #toast { bottom: calc(var(--sheet-h) + 40px); }
 }
 @media (max-width: 999.98px) {
+  /* En Cómo llegar ya están sus campos: el buscador de arriba sobra */
+  body[data-view="plan"] .top { display: none; }
+  body[data-view="plan"] #sheet { --sheet-room: calc(var(--vvh, 100dvh) - 12px - env(safe-area-inset-top, 0px)); }
   body:not([data-view="home"]) #locate { display: none; }
 }
 @media (max-width: 359.98px) {
@@ -273,6 +279,7 @@ body:not([data-located]) #locate { display: none; }
   .search input { font-size: 15px; }
   .top .round { width: 44px; height: 44px; border-radius: 12px; background: var(--soft); box-shadow: none; }
   .top .menu-btn { width: auto; padding: 0 12px; }
+  body[data-view] #sheet[data-size] { height: auto; }
   #sheet { position: static; flex: 1; min-height: 0; max-height: none !important; background: transparent; border-radius: 0; box-shadow: none; padding: 0; }
   #grab { display: none; }
   #sheet-body { padding: 0; }
