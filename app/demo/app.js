@@ -65,6 +65,7 @@ const state = {
   lineDir: 0,
   follow: false,
   busFromLine: false,
+  wait: null,
   stopFromLine: false,
   query: '',
   alerts: [],
@@ -146,6 +147,7 @@ function setTheme(value) {
   document.documentElement.dataset.theme = value;
   try { localStorage.setItem('xaven-tema', value); } catch { /* se aplica solo a esta visita */ }
   paintThemeButton();
+  applyMapTheme();
 }
 const savedTheme = readTheme();
 if (savedTheme === 'light' || savedTheme === 'dark') document.documentElement.dataset.theme = savedTheme;
@@ -157,14 +159,48 @@ const isDark = () => {
 };
 const token = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+/** Colores de cada capa en cada tema: cambiar de tema no vuelve a cargar el mapa. */
+let themeTable = null;
+const themeName = () => (isDark() ? 'dark' : 'light');
+
+function paintStyle(style) {
+  for (const layer of style.layers) {
+    const paint = themeTable[themeName()][layer.id];
+    if (!paint) continue;
+    layer.paint ??= {};
+    for (const [key, value] of Object.entries(paint)) {
+      if (value === null) delete layer.paint[key];
+      else layer.paint[key] = value;
+    }
+  }
+  return style;
+}
+
+function applyMapTheme() {
+  if (!mapReady) return;
+  for (const [id, paint] of Object.entries(themeTable[themeName()])) {
+    for (const [key, value] of Object.entries(paint)) map.setPaintProperty(id, key, value);
+  }
+  map.setPaintProperty('approach', 'line-color', token('--ink'));
+  map.setPaintProperty('bus-stops', 'circle-color', token('--surface'));
+  map.setPaintProperty('bus-stops', 'circle-stroke-color', token('--mute'));
+  applyMapFocus();
+}
+
 async function buildStyle() {
   if (remoteTiles) {
-    const res = await fetch(`data/map-style-${isDark() ? 'dark' : 'light'}.json`);
-    return res.json();
+    const { style, themes } = await fetch('data/map-style.json').then((r) => r.json());
+    themeTable = themes;
+    return paintStyle(style);
   }
   streets ??= await fetch('data/streets.json').then((r) => r.json());
+  themeTable = {
+    light: { bg: { 'background-color': '#E7E9E6' }, streets: { 'line-color': '#FFFFFF' } },
+    dark: { bg: { 'background-color': '#14171B' }, streets: { 'line-color': '#2A3037' } },
+  };
   return {
     version: 8,
+    transition: { duration: 120, delay: 0 },
     sources: { streets: { type: 'geojson', data: streets, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' } },
     layers: [
       { id: 'bg', type: 'background', paint: { 'background-color': isDark() ? '#14171B' : '#E7E9E6' } },
@@ -187,7 +223,7 @@ function addOverlays() {
   map.addLayer({ id: 'approach', type: 'line', source: 'approach', layout: round, paint: { 'line-color': token('--ink'), 'line-width': 6 } });
   map.addLayer({ id: 'bus-stops', type: 'circle', source: 'bus-stops', minzoom: 14.6, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 14.6, 2.6, 16, 4.5], 'circle-color': token('--surface'), 'circle-stroke-color': token('--mute'), 'circle-stroke-width': 1.2 } });
   mapReady = true;
-  applyMapFocus(false);
+  applyMapTheme();
   updateApproach();
 }
 
@@ -237,12 +273,7 @@ async function initMap() {
     map.on('mousemove', 'bus-stops', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'bus-stops', () => { map.getCanvas().style.cursor = ''; });
     map.on('error', (e) => console.warn('Mapa:', e.error?.message));
-    const onTheme = async () => {
-      mapReady = false;
-      map.setStyle(await buildStyle(), { diff: false });
-    };
-    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', onTheme);
-    new MutationObserver(onTheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyMapTheme);
     tickMarkers();
   } catch (err) {
     console.error(err);
@@ -276,7 +307,7 @@ function applyMapFocus() {
   map.setPaintProperty('routes', 'line-opacity', alone || state.view === 'stop' ? 0 : (isDark() ? 0.42 : 0.34));
   let ids = null;
   if (state.view === 'line') ids = net.lines.filter((l) => l.number === state.lineNumber).flatMap((l) => l.dirs.flatMap((d) => d.stops));
-  if (state.view === 'bus') ids = state.busByKey.get(state.busKey)?.dir.stops ?? null;
+  if (state.view === 'bus') ids = (state.busByKey.get(state.busKey)?.dir ?? state.wait?.dir)?.stops ?? null;
   map.setFilter('bus-stops', ids ? ['in', ['get', 'id'], ['literal', [...new Set(ids)]]] : null);
   map.setFilter('route-sel', ['==', ['get', 'number'], state.view === 'line' ? state.lineNumber : '']);
 }
@@ -303,9 +334,33 @@ function heroBusKey() {
   if (state.view === 'bus') return state.busKey;
   if (state.view === 'stop') {
     const hero = currentHero();
-    if (hero && state.busByKey.has(hero.key)) return hero.key;
+    if (hero) return state.busByKey.has(hero.key) ? hero.key : companionOf(hero)?.key ?? null;
   }
   return null;
+}
+
+const startOf = (a) => {
+  const svc = a.dir.svc[clock().kind];
+  return a.minutes - (svc.off[a.stopIndex] - svc.off[0]);
+};
+
+/**
+ * Cuando el viaje elegido aún no ha salido, busca el bus de esa línea que hay
+ * ahora en la calle: primero el que espera para hacer ese viaje y, si no, el que
+ * termina su recorrido más cerca de la hora de salida.
+ */
+function companionOf(a) {
+  const kind = clock().kind;
+  const start = startOf(a);
+  const same = state.buses.filter((b) => b.line.number === a.line.number);
+  const waiting = same.find((b) => b.parkedUntil && Math.abs((b.parkedUntil - start) % 1440) < 0.01);
+  if (waiting) return waiting;
+  const score = (b) => {
+    const end = passTime(b.dir.svc[kind], b.run, b.dir.stops.length - 1);
+    const gap = start - end;
+    return (b.line.id === a.line.id ? 0 : 5000) + (b.parkedUntil ? 10000 : 0) + (gap >= 0 ? gap : 2000 - gap);
+  };
+  return [...same].sort((x, y) => score(x) - score(y))[0] ?? null;
 }
 
 /** Mantiene en pantalla el bus o los buses elegidos hasta que la persona mueva el mapa. */
@@ -318,10 +373,17 @@ function followCamera(duration = 900) {
     if (list.length) moveTo(list.map((b) => [b.lat, b.lng]), 15.8, duration);
   } else if (state.view === 'bus') {
     const bus = state.busByKey.get(state.busKey);
-    if (!bus) return;
+    if (!bus) {
+      if (state.wait) {
+        const here = net.stopById.get(state.wait.stopId);
+        const first = net.stopById.get(state.wait.dir.stops[0]);
+        moveTo([[here.lat, here.lng], [first.lat, first.lng]], 15.8, duration);
+      }
+      return;
+    }
     const points = [[bus.lat, bus.lng]];
     const i = state.stopId ? bus.dir.stops.indexOf(state.stopId) : -1;
-    if (i >= bus.nextStopIndex) {
+    if (state.wait || i >= bus.nextStopIndex) {
       const stop = net.stopById.get(state.stopId);
       points.push([stop.lat, stop.lng]);
     }
@@ -434,10 +496,30 @@ function tickData() {
   const c = clock();
   state.buses = busesAt(net, c.kind, c.t);
   state.busByKey = new Map(state.buses.map((b) => [b.key, b]));
+  refreshWait();
   updateMarkers();
 }
 
+/** El viaje que se esperaba ya ha salido, o el bus que se enseñaba ha cambiado. */
+function refreshWait() {
+  if (!state.wait || state.view !== 'bus') return;
+  const before = state.busKey;
+  if (state.busByKey.has(state.wait.key)) {
+    state.busKey = state.wait.key;
+    state.wait = null;
+  } else {
+    state.busKey = companionOf(state.wait)?.key ?? null;
+  }
+  if (state.busKey !== before) {
+    updatePins();
+    applyMapFocus();
+    updateApproach();
+    followCamera(700);
+  }
+}
+
 let stopPin = null;
+let originPin = null;
 let mePin = null;
 function updatePins() {
   if (!map) return;
@@ -454,6 +536,17 @@ function updatePins() {
       el.append(tag);
     }
     stopPin = new maplibregl.Marker({ element: el }).setLngLat([stop.lng, stop.lat]).addTo(map);
+  }
+  originPin?.remove();
+  originPin = null;
+  if (state.view === 'bus' && state.wait && !state.busByKey.has(state.busKey)) {
+    const first = net.stopById.get(state.wait.dir.stops[0]);
+    const el = document.createElement('div');
+    el.className = 'pin sel';
+    const tag = document.createElement('span');
+    tag.textContent = `Sale de ${nice(first.name)}`;
+    el.append(tag);
+    originPin = new maplibregl.Marker({ element: el }).setLngLat([first.lng, first.lat]).addTo(map);
   }
   if (state.me && !mePin) {
     const el = document.createElement('div');
@@ -474,9 +567,10 @@ function updateApproach() {
   const approachSrc = map.getSource('approach');
   if (!focusSrc || !approachSrc) return;
   if (!bus) {
-    if (shownFocus) {
-      shownFocus = null;
-      focusSrc.setData(empty);
+    const dir = state.view === 'bus' ? state.wait?.dir : null;
+    if (shownFocus !== (dir ?? null)) {
+      shownFocus = dir ?? null;
+      focusSrc.setData(dir ? asLine(dir.path, { color: state.wait.line.color }) : empty);
       approachSrc.setData(empty);
     }
     return;
@@ -593,11 +687,27 @@ function stripHTML(bus, { target = null, full = false } = {}) {
   return `<ol class="tl strip" style="--c:${bus.line.color}">${html}</ol>`;
 }
 
-function nowCard(label, place, detail, key) {
+function nowCard(label, place, detail, key, stopId) {
   const inner = `<span class="now-text"><span class="now-label">${esc(label)}</span><strong>${esc(place)}</strong>${detail ? `<small>${esc(detail)}</small>` : ''}</span>`;
   return key
-    ? `<button type="button" class="now" data-act="follow" data-key="${esc(key)}" aria-label="${esc(`${label} ${place}. Ver recorrido`)}">${inner}<span class="now-go" aria-hidden="true">›</span></button>`
+    ? `<button type="button" class="now" data-act="${stopId ? 'arrival' : 'follow'}" data-key="${esc(key)}"${stopId ? ` data-stop="${esc(stopId)}"` : ''} aria-label="${esc(`${label} ${place}. Ver recorrido`)}">${inner}<span class="now-go" aria-hidden="true">›</span></button>`
     : `<div class="now">${inner}</div>`;
+}
+
+/** Dónde está el bus de la línea cuando el viaje elegido aún no ha salido. */
+function waitCard(a, link = false) {
+  const bus = companionOf(a);
+  const start = formatMinutes(startOf(a));
+  const key = link ? a.key : undefined;
+  const stopId = link ? a.stopId : undefined;
+  if (!bus) {
+    return { bus: null, card: nowCard('Todavía no ha salido', nice(a.dir.origin), `Sale a las ${start}`, key, stopId), note: 'Ahora no hay ningún bus de esta línea en la calle.' };
+  }
+  const where = whereNow(bus);
+  if (bus.parkedUntil && Math.abs((bus.parkedUntil - startOf(a)) % 1440) < 0.01) {
+    return { bus, card: nowCard(where.label, where.place, `Sale a las ${start}`, key, stopId), note: '' };
+  }
+  return { bus, card: nowCard(where.label, where.place, `Bus de la línea ${a.line.number} que hay ahora en la calle`, key, stopId), note: `Tu viaje sale a las ${start} de ${nice(a.dir.origin)}.` };
 }
 
 function arrivalsFor(stopId) {
@@ -633,6 +743,8 @@ function homeHTML() {
     <button type="button" class="cta second" data-act="menu">Ver todas las líneas</button>`;
 }
 
+const nowCardWithNote = ({ card, note }) => `${card}${note ? `<p class="wait-note">${esc(note)}</p>` : ''}`;
+
 function stopHTML() {
   const stop = net.stopById.get(state.stopId);
   const list = arrivalsFor(stop.id);
@@ -651,27 +763,41 @@ function stopHTML() {
     else detail = left === 1 ? 'Le falta 1 parada para llegar aquí' : `Le faltan ${left} paradas para llegar aquí`;
     card = nowCard(where.label, where.place, detail, hero.key);
   } else {
-    const svc = hero.dir.svc[clock().kind];
-    card = nowCard('Todavía no ha salido', nice(hero.dir.origin), `Sale a las ${formatMinutes(svc.dep[hero.run] + svc.off[0])}`);
+    const wait = waitCard(hero, true);
+    card = nowCardWithNote(wait);
   }
   const later = list.filter((a) => a.key !== hero.key).slice(0, 5);
   return `${head}
     <div class="stop-grid">
       <div class="hero">
-        <div class="hero-line">
+        <button type="button" class="hero-line" data-act="arrival" data-key="${esc(hero.key)}" data-stop="${esc(hero.stopId)}" aria-label="${esc(`Línea ${hero.line.number} hacia ${nice(hero.dir.dest)}. Ver dónde está el bus`)}">
           <span class="badge big" style="--c:${hero.line.color}">${esc(hero.line.number)}</span>
-          <p class="hacia">Hacia <strong>${esc(nice(hero.dir.dest))}</strong></p>
-        </div>
+          <span class="hacia">Hacia <strong>${esc(nice(hero.dir.dest))}</strong></span>
+          <span class="now-go" aria-hidden="true">›</span>
+        </button>
         <div class="hero-time"><span class="bignum">${big}</span><span>a las ${hero.time}</span>${bellButton(hero, { wide: true })}</div>
         ${bellChooser(hero)}
         ${card}
         ${bus ? stripHTML(bus, { target: hero.stopIndex }) : ''}
       </div>
-      <div class="rows"><h2>Después pasan</h2>${later.length ? '<p class="bell-hint">Toca la campana y te avisamos antes de que llegue.</p>' : ''}${later.length ? later.map((a) => arrivalRow(a)).join('') : '<p class="empty">No hay más buses en las próximas dos horas.</p>'}</div>
+      <div class="rows"><h2>Después pasan</h2>${later.length ? '<p class="bell-hint">Toca una línea para ver dónde está su bus. La campana te avisa antes de que llegue.</p>' : ''}${later.length ? later.map((a) => arrivalRow(a)).join('') : '<p class="empty">No hay más buses en las próximas dos horas.</p>'}</div>
     </div>${FOOT}`;
 }
 
+function waitHTML() {
+  const a = state.wait;
+  const stop = net.stopById.get(a.stopId);
+  const eta = Math.max(0, Math.round(a.minutes - clock().t));
+  const wait = waitCard(a);
+  return `<div class="head">${BACK}<span class="badge" style="--c:${a.line.color}">${esc(a.line.number)}</span><div><small>Hacia ${esc(nice(a.dir.dest))}</small></div></div>
+    <p class="card-title">Dónde está ahora</p>
+    ${nowCardWithNote(wait)}
+    <div class="hero-time"><span class="bignum">${eta === 0 ? 'Ya llega' : `${eta} min`}</span><span>llega a ${esc(nice(stop.name))} a las ${a.time}</span></div>
+    ${wait.bus && !wait.bus.parkedUntil ? stripHTML(wait.bus) : ''}${FOOT}`;
+}
+
 function busHTML() {
+  if (state.wait) return waitHTML();
   const bus = state.busByKey.get(state.busKey);
   if (!bus) {
     return `<div class="head">${BACK}<div><h1>Este bus ha terminado su recorrido</h1></div></div>${FOOT}`;
@@ -886,6 +1012,7 @@ function toast(text) {
 
 /* ---------- Acciones ---------- */
 function go(view) {
+  if (view !== 'bus') state.wait = null;
   if (view !== state.view && state.view !== 'search' && state.view !== 'notices') state.previous = state.view;
   state.view = view;
   state.bellFor = null;
@@ -922,13 +1049,32 @@ function focusHero() {
   const stop = net.stopById.get(state.stopId);
   const hero = currentHero();
   const bus = hero ? state.busByKey.get(hero.key) : null;
+  const other = hero && !bus ? companionOf(hero) : null;
   requestAnimationFrame(() => {
     if (bus) moveTo([[stop.lat, stop.lng], ...approachPath(bus, hero.stopIndex)]);
+    else if (other) moveTo([[stop.lat, stop.lng], [other.lat, other.lng]], 15.5);
     else moveTo([[stop.lat, stop.lng]], 15.5);
   });
 }
 
+/** Al tocar una línea en una parada: lleva al bus de esa línea, esté donde esté. */
+function openArrival(key, stopId) {
+  const a = arrivalsFor(stopId).find((x) => x.key === key);
+  if (!a || state.busByKey.has(key)) {
+    selectBus(key);
+    return;
+  }
+  state.follow = true;
+  state.busFromLine = false;
+  state.previous = state.view === 'bus' ? state.previous : state.view;
+  state.wait = a;
+  state.busKey = companionOf(a)?.key ?? null;
+  go('bus');
+  requestAnimationFrame(() => followCamera(700));
+}
+
 function selectBus(key) {
+  state.wait = null;
   state.busKey = key;
   state.busFromLine = state.view === 'line';
   state.follow = true;
@@ -1027,16 +1173,8 @@ function wire() {
     else if (act === 'menu') go('menu');
     else if (act === 'sim10') setSim({ base: 600, kind: 'laborable', speed: 1 });
     else if (act === 'arrival') {
-      if (state.view === 'home') {
-        state.arrivalKey = t.dataset.key;
-        selectStop(t.dataset.stop, true);
-      } else {
-        state.arrivalKey = t.dataset.key;
-        renderSheet();
-        updateMarkers();
-        updateApproach();
-        focusHero();
-      }
+      if (state.view === 'home') selectStop(t.dataset.stop);
+      openArrival(t.dataset.key, t.dataset.stop);
     } else if (act === 'bell') {
       state.bellFor = state.bellFor === t.dataset.key ? null : t.dataset.key;
       renderSheet();

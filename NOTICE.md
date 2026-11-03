@@ -7,7 +7,7 @@ Proyecto no oficial, sin relación con AULUSA, Grupo Monbus ni el Concello de Lu
 - **Líneas, paradas y horarios:** publicados por el operador en buslugo.com y transcritos por [Urbanos de Lugo](https://github.com/urbanos-lugo/urbanos-lugo.github.io). La fuente no indica ninguna licencia y este proyecto no tiene ningún acuerdo de reutilización.
 - **Recorridos y calles:** © colaboradores de OpenStreetMap, bajo [ODbL 1.0](https://opendatacommons.org/licenses/odbl/). `network.json` (recorridos) y `streets.json` siguen bajo ODbL.
 - **Festivos:** Diario Oficial de Galicia.
-- **Mapa base:** [OpenFreeMap](https://openfreemap.org/), © OpenMapTiles, datos de OpenStreetMap. Los estilos `map-style-*.json` proceden de Urbanos de Lugo, derivados de los de OpenFreeMap.
+- **Mapa base:** [OpenFreeMap](https://openfreemap.org/), © OpenMapTiles, datos de OpenStreetMap. Los estilos de `tools/map-style/`, unidos en `map-style.json`, proceden de Urbanos de Lugo, derivados de los de OpenFreeMap.
 
 ## Código y tipografías
 
