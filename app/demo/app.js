@@ -275,8 +275,8 @@ async function initMap() {
       minZoom: 10,
     });
     map.touchZoomRotate.disableRotation();
-    map.on('dragstart', () => { state.follow = false; });
-    map.on('wheel', () => { state.follow = false; });
+    map.on('dragstart', () => { state.follow = false; mapTouched = true; });
+    map.on('wheel', () => { state.follow = false; mapTouched = true; });
     map.on('touchstart', (e) => { if (e.originalEvent?.touches?.length > 1) state.follow = false; });
     new ResizeObserver(() => map.resize()).observe(box);
     map.on('style.load', addOverlays);
@@ -881,8 +881,8 @@ function homeHTML() {
       </div>${wake}`;
   }
   const stop = net.stopById.get(state.homeStopId);
-  const list = arrivalsFor(stop.id).slice(0, 3);
-  const where = state.me ? `Tu parada más cercana, a ${Math.round(distanceMetres(state.me.lat, state.me.lng, stop.lat, stop.lng) / 10) * 10} m` : 'Tu parada';
+  const list = nextPerLine(arrivalsFor(stop.id)).slice(0, 3);
+  const where = state.me ? `Estás a ${Math.round(distanceMetres(state.me.lat, state.me.lng, stop.lat, stop.lng) / 10) * 10} m de esta parada` : 'Tu parada';
   const rows = list.length
     ? `<div class="rows">${list.map((a) => arrivalRow(a)).join('')}</div>`
     : '<p class="empty">No pasa ningún bus por aquí en las próximas dos horas.</p>';
@@ -1080,7 +1080,8 @@ function planResultsHTML() {
   }
   if (!plan.from || !plan.to) return '<p class="bell-hint plan-tip">Escribe una calle, un sitio o una parada de Lugo. Por ejemplo: «hospital» o «catedral».</p>';
   refreshPlan();
-  const { trips, walk, better } = plan.result;
+  const { trips, walk, better, nearFrom, nearTo } = plan.result;
+  if (!nearFrom || !nearTo) return `<p class="empty">No hay paradas de bus cerca ${!nearFrom ? 'del punto de salida' : 'del destino'}. Prueba con otro sitio de Lugo.</p>`;
   const walkRow = walk !== null ? `<div class="now plan-walk"><span class="step-icon" aria-hidden="true">${WALK_ICON}</span><span class="now-text"><strong>${better ? 'Te conviene ir andando' : 'También puedes ir andando'}</strong><small>Unos ${roundMin(walk)} min, llegas a las ${formatMinutes(clock().t + walk)}</small></span></div>` : '';
   if (!trips.length) {
     return `${walkRow}<p class="empty">Ahora no hay ningún bus para este viaje en las próximas 3 horas.</p>`;
@@ -1340,7 +1341,7 @@ function openArrival(key, stopId, known = null) {
 function openPlan(to = null) {
   const plan = state.plan;
   if (to) plan.to = to;
-  if (!plan.from && state.me) plan.from = { me: true, label: 'Mi ubicación', sub: '', lat: state.me.lat, lng: state.me.lng };
+  if (!plan.from && inLugo()) plan.from = myPlace();
   plan.field = !plan.from ? 'from' : 'to';
   plan.text = '';
   plan.places = [];
@@ -1424,7 +1425,8 @@ function goHome() {
   state.query = '';
   go('home');
   try { history.replaceState(null, '', location.pathname); } catch { /* sin historial en el visor */ }
-  if (map) requestAnimationFrame(() => map.fitBounds(CITY_BOUNDS, { padding: mapPadding(), duration: reduced ? 0 : 700 }));
+  if (inLugo()) focusOnMe();
+  else if (map) requestAnimationFrame(() => map.fitBounds(CITY_BOUNDS, { padding: mapPadding(), duration: reduced ? 0 : 700 }));
 }
 
 function goBack() {
@@ -1454,26 +1456,91 @@ function goBack() {
   goHome();
 }
 
-async function locate() {
-  if (!navigator.geolocation) { toast('Este navegador no da tu ubicación. Escribe el nombre de tu parada arriba.'); return; }
-  navigator.geolocation.getCurrentPosition((pos) => {
-    state.me = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-    document.body.dataset.located = 'yes';
-    let best = net.stops[0];
-    let bestD = Infinity;
-    for (const s of net.stops) {
-      const d = distanceMetres(state.me.lat, state.me.lng, s.lat, s.lng);
-      if (d < bestD) { bestD = d; best = s; }
+const FAR_FROM_LUGO = 20000;
+const IN_PLAN_REFRESH_METRES = 100;
+let located = false;
+let mapTouched = false;
+
+function nearestStop(point) {
+  let stop = net.stops[0];
+  let metres = Infinity;
+  for (const candidate of net.stops) {
+    const d = distanceMetres(point.lat, point.lng, candidate.lat, candidate.lng);
+    if (d < metres) { metres = d; stop = candidate; }
+  }
+  return { stop, metres };
+}
+
+const inLugo = () => Boolean(state.me) && nearestStop(state.me).metres <= FAR_FROM_LUGO;
+const myPlace = () => ({ me: true, label: 'Mi ubicación', sub: '', lat: state.me.lat, lng: state.me.lng });
+
+function focusOnMe(duration = 700) {
+  const near = nearestStop(state.me);
+  requestAnimationFrame(() => moveTo([[state.me.lat, state.me.lng], [near.stop.lat, near.stop.lng]], 16, duration));
+}
+
+/** Coloca a la persona en el mapa y mantiene al día su parada más cercana y su punto de salida. */
+function applyPosition(pos) {
+  const point = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+  const first = !located;
+  state.me = point;
+  located = true;
+  document.body.dataset.located = 'yes';
+  if (mePin) mePin.setLngLat([point.lng, point.lat]);
+  else updatePins();
+  const near = nearestStop(point);
+  if (near.metres > FAR_FROM_LUGO) {
+    if (state.homeStopId && !first) state.homeStopId = null;
+    if (first) toast('Parece que estás fuera de Lugo. Puedes buscar cualquier parada.');
+    renderSheet();
+    return;
+  }
+  const changedStop = state.homeStopId !== near.stop.id;
+  state.homeStopId = near.stop.id;
+  if (state.view === 'home') {
+    if (changedStop) updatePins();
+    renderSheet();
+    if (first && !mapTouched) focusOnMe();
+  }
+  const plan = state.plan;
+  if (state.view === 'plan') {
+    const typingFrom = document.activeElement?.dataset?.field === 'from' && plan.text;
+    if (!plan.from && !typingFrom) {
+      plan.from = myPlace();
+      if (plan.field === 'from') plan.field = 'to';
+      planAfterPick();
+    } else if (plan.from?.me && distanceMetres(plan.from.lat, plan.from.lng, point.lat, point.lng) >= IN_PLAN_REFRESH_METRES) {
+      plan.from = myPlace();
+      renderSheet();
+      updatePlanMap();
     }
-    state.homeStopId = best.id;
+  }
+}
+
+/** Empieza a seguir la posición al abrir la web; el navegador pide permiso la primera vez. */
+function startLocating() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.watchPosition(applyPosition, () => {}, { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 });
+}
+
+/** Botón de ubicación: vuelve a donde está la persona y explica si no se puede. */
+function locate() {
+  if (!navigator.geolocation) { toast('Este navegador no da tu ubicación. Escribe el nombre de tu parada arriba.'); return; }
+  if (state.me && state.view !== 'home') {
     state.stopId = null;
     go('home');
-    if (bestD > 20000) {
-      toast('Estás lejos de Lugo: esta es la parada más cercana.');
-      return;
-    }
-    requestAnimationFrame(() => moveTo([[state.me.lat, state.me.lng], [best.lat, best.lng]], 16));
-  }, () => toast('No hemos podido saber dónde estás. Escribe el nombre de tu parada arriba.'), { timeout: 8000, maximumAge: 60000 });
+  }
+  if (state.me) {
+    if (inLugo()) focusOnMe();
+    else toast('Parece que estás fuera de Lugo. Puedes buscar cualquier parada.');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition((pos) => {
+    applyPosition(pos);
+    state.stopId = null;
+    go('home');
+    if (inLugo()) focusOnMe();
+  }, () => toast('No podemos saber dónde estás. Revisa el permiso de ubicación del navegador o escribe tu parada arriba.'), { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
 }
 
 function wire() {
@@ -1529,10 +1596,9 @@ function wire() {
         if (!navigator.geolocation) { toast('Este navegador no da tu ubicación. Escribe una calle o una parada.'); return; }
         toast('Buscando dónde estás…');
         navigator.geolocation.getCurrentPosition((pos) => {
-          state.me = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-          document.body.dataset.located = 'yes';
-          updatePins();
-          state.plan.from = { me: true, label: 'Mi ubicación', sub: '', lat: state.me.lat, lng: state.me.lng };
+          applyPosition(pos);
+          if (!inLugo()) { toast('Parece que estás fuera de Lugo. Escribe una calle o una parada.'); return; }
+          state.plan.from = myPlace();
           state.plan.field = state.plan.to ? 'from' : 'to';
           planAfterPick();
         }, () => toast('No he podido saber dónde estás. Escribe una calle o una parada.'), { enableHighAccuracy: true, timeout: 10000 });
@@ -1756,6 +1822,7 @@ async function start() {
   updatePins();
   const initial = location.hash.slice(1);
   if (net.stopById.has(initial)) selectStop(initial);
+  startLocating();
 }
 
 start().catch((err) => {
