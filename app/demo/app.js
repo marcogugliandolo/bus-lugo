@@ -669,7 +669,7 @@ function updateApproach() {
 
 /* ---------- Panel ---------- */
 const minutesHTML = (eta) => (eta === 0 ? 'Ahora' : `${eta}<small> min</small>`);
-const BACK = '<button type="button" class="back" data-act="back" ><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>Volver</button>';
+const BACK = '<button type="button" class="back" data-act="back" aria-label="Volver" title="Volver"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg></button>';
 const FOOT = '<p class="foot">Hora y posición aproximadas según el horario. Web no oficial.</p>';
 const MAP_CREDIT = 'Mapa: OpenFreeMap © OpenMapTiles. Datos y búsqueda de sitios: © OpenStreetMap, Photon.';
 
@@ -769,7 +769,7 @@ function arrivalRow(a) {
   return `<div class="row arr">
     <button type="button" class="row-main" data-act="arrival" data-key="${esc(a.key)}" data-stop="${esc(a.stopId)}">
       <span class="badge" style="--c:${a.line.color}">${esc(a.line.number)}</span>
-      <span class="to">${esc(nice(a.dir.dest))}<small>a las ${a.time}${a.later ? ` · luego ${a.later}` : ''}</small></span>
+      <span class="to">${esc(nice(a.dir.dest))}<small>${a.time}${a.later ? `, luego ${a.later}` : ''}</small></span>
       <span class="eta">${minutesHTML(a.eta)}</span>
     </button>${bellButton(a)}
   </div>${bellChooser(a)}`;
