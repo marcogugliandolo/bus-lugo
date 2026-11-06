@@ -114,6 +114,7 @@ body[data-view="search"] #sheet[data-size="tall"], body[data-view="plan"] #sheet
 .bell-opts { display: grid; gap: 8px; padding: 12px; border-radius: 14px; background: var(--soft); }
 .bell-opts p { font-size: var(--t-note); font-weight: 700; }
 .bell-opts small { font-size: var(--t-label); color: var(--mute); }
+.bell-opts .bell-when { font-size: var(--t-note); font-weight: 700; color: var(--ink); }
 .bell-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .bell-row button { flex: 1; min-width: 58px; height: 44px; border: 0; border-radius: 12px; background: var(--surface); font-size: var(--t-action); font-weight: 700; }
 .bell-row button[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); }

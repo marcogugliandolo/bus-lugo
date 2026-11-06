@@ -970,6 +970,19 @@ function removeAlert(alert) {
   saveAlerts();
 }
 
+/** La hora a la que sonará un aviso: X min antes de que el bus llegue a la parada. */
+function ringTime(alert) {
+  const minutes = minutesFor(alert.key, alert.stopIndex);
+  return minutes === null ? '' : formatMinutes(Math.round(minutes - alert.before));
+}
+const alertDone = (result, alert) => {
+  const vars = { n: alert.before, time: ringTime(alert) };
+  if (result === 'ok') return t('Listo. Sonará a las {time}, {n} min antes de que llegue, aunque cierres la web', vars);
+  if (result === 'denied') return t('Sonará a las {time} solo con esta pantalla abierta: las notificaciones están bloqueadas', vars);
+  if (result === 'error') return t('Sonará a las {time}. No se pudo programar en el móvil: deja esta pantalla abierta', vars);
+  return t('Sonará a las {time}, {n} min antes de que llegue. Deja esta pantalla abierta', vars);
+};
+
 function bellChooser(a) {
   if (state.bellFor !== bellId(a)) return '';
   const armed = armedFor(a);
@@ -980,7 +993,7 @@ function bellChooser(a) {
   return `<div class="bell-opts"><p>${kind === 'off' ? t('¿Cuánto antes de llegar a tu parada te avisamos?') : t('¿Cuánto antes te avisamos?')}</p><div class="bell-row">
     ${options.map((n) => `<button type="button" data-act="bell-set" ${data} data-before="${n}" aria-pressed="${armed?.before === n}">${n} min</button>`).join('')}
     ${armed ? `<button type="button" class="off" data-act="bell-off" ${data}>${t('Quitar')}</button>` : ''}
-  </div><small>${alertHelp()}</small>${waOffer(armed)}</div>`;
+  </div>${armed && ringTime(armed) ? `<p class="bell-when">${t('Sonará a las {time}, {n} min antes de que llegue', { time: ringTime(armed), n: armed.before })}</p>` : ''}<small>${alertHelp()}</small>${waOffer(armed)}</div>`;
 }
 
 function arrivalRow(a) {
@@ -2473,10 +2486,8 @@ function wire() {
       renderSheet();
       const result = await pending;
       renderSheet();
-      if (result === 'ok') toast(t('Listo. Te avisaremos en el móvil {n} min antes, aunque cierres la web', { n: before }));
-      else if (result === 'denied') toast(t('Las notificaciones están bloqueadas: solo te avisaremos con esta pantalla abierta'));
-      else if (result === 'error') toast(t('No se pudo programar en el móvil: deja esta pantalla abierta para recibir el aviso'));
-      else toast(t('Te avisaremos {n} min antes. Deja esta pantalla abierta', { n: before }));
+      const made = state.alerts.find((x) => x.key === key && x.stopId === stopId && kindOf(x) === kind);
+      if (made) toast(alertDone(result, made));
     } else if (act === 'bell-off') {
       removeAlert(state.alerts.find((x) => x.key === el.dataset.key && x.stopId === el.dataset.stop && kindOf(x) === el.dataset.kind));
       state.bellFor = null;
@@ -2532,7 +2543,8 @@ function wire() {
       if (state.ride) state.ride.alertId = state.alerts.find((x) => x.key === ride.key && kindOf(x) === 'off')?.id ?? null;
       saveRide();
       renderSheet();
-      if (result === 'ok') toast(t('Listo. Te avisaremos en el móvil {n} min antes, aunque cierres la web', { n: before }));
+      const made = state.alerts.find((x) => x.key === ride.key && kindOf(x) === 'off');
+      if (made) toast(alertDone(result, made));
     } else if (act === 'ride-end') {
       endRide();
       if (state.view !== 'home') goHome();
