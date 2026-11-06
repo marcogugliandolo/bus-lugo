@@ -384,6 +384,34 @@ a.row { color: inherit; text-decoration: none; }
 .foot a { color: inherit; font-weight: 700; text-underline-offset: 2px; }
 .link-btn { align-self: flex-start; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--ink); font-size: var(--t-note); font-weight: 700; text-align: left; text-decoration: underline; text-underline-offset: 3px; }
 .foot .link-btn, small .link-btn { display: inline; min-height: 0; padding: 6px 0; font: inherit; font-weight: 700; color: inherit; }
+/* El aviso a toda pantalla */
+.ring { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: max(24px, env(safe-area-inset-top, 0px)) 20px max(24px, env(safe-area-inset-bottom, 0px)); background: linear-gradient(180deg, rgba(0, 0, 0, .08), rgba(0, 0, 0, .38)), var(--c); color: #FFFFFF; overflow-y: auto; animation: ringIn .28s cubic-bezier(.2, .8, .3, 1); }
+.ring[hidden] { display: none; }
+.ring-card { width: min(100%, 420px); display: grid; justify-items: center; gap: 14px; text-align: center; }
+.ring-eyebrow { display: flex; align-items: center; gap: 8px; font-family: var(--display); font-size: 17px; font-weight: 700; opacity: .9; }
+.ring-bell { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: rgba(255, 255, 255, .18); transform-origin: 50% 20%; animation: ringBell 1.1s ease-in-out 3; }
+.ring-title { font-family: var(--display); font-size: clamp(40px, 12vw, 64px); font-weight: 700; line-height: 1; letter-spacing: -.02em; text-wrap: balance; }
+.ring-line { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 10px; font-size: var(--t-big); font-weight: 700; }
+.ring-badge { min-width: 52px; height: 40px; padding: 0 10px; border-radius: 10px; background: #FFFFFF; color: var(--c); font-family: var(--display); font-size: 24px; line-height: 40px; }
+.ring-count { position: relative; display: flex; align-items: baseline; justify-content: center; gap: 8px; min-height: 112px; margin: 6px 0 0; }
+.ring-count::before { content: ""; position: absolute; left: 50%; top: 50%; width: 150px; height: 150px; margin: -75px 0 0 -75px; border-radius: 50%; background: rgba(255, 255, 255, .12); animation: ringPulse 1.8s ease-out infinite; z-index: -1; }
+.ring-count strong { font-family: var(--display); font-size: 104px; font-weight: 700; line-height: 1; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.ring-count span { font-size: 28px; font-weight: 700; }
+.ring-stop { font-size: var(--t-big); font-weight: 700; line-height: 1.3; }
+.ring-src { display: inline-flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 14px; background: rgba(0, 0, 0, .22); font-size: var(--t-note); }
+.ring-src i { width: 9px; height: 9px; border-radius: 50%; background: var(--live); box-shadow: 0 0 0 3px rgba(61, 220, 132, .35); }
+.ring-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; margin-top: 10px; }
+.ring-actions button { min-height: 54px; border: 0; border-radius: 14px; font-size: var(--t-action); font-weight: 700; }
+.ring-go { background: #FFFFFF; color: #121416; }
+.ring-ok { background: rgba(255, 255, 255, .2); color: #FFFFFF; }
+.ring-snooze { min-height: 44px; padding: 0 12px; border: 0; background: transparent; color: #FFFFFF; font-size: var(--t-note); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; opacity: .92; }
+.ring button:focus-visible { outline: 3px solid #FFFFFF; outline-offset: 3px; }
+@keyframes ringIn { from { opacity: 0; transform: scale(1.03); } to { opacity: 1; transform: none; } }
+@keyframes ringBell { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(14deg); } 30% { transform: rotate(-12deg); } 45% { transform: rotate(8deg); } 60% { transform: rotate(-5deg); } 75% { transform: rotate(2deg); } }
+@keyframes ringPulse { 0% { transform: scale(.7); opacity: .9; } 100% { transform: scale(1.5); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .ring, .ring-bell, .ring-count::before { animation: none; } }
+@media (max-height: 600px) { .ring-card { gap: 8px; } .ring-count { min-height: 80px; } .ring-count strong { font-size: 76px; } .ring-title { font-size: 38px; } }
+
 /* Avisos por WhatsApp */
 .wa-btn { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 44px; padding: 0 14px; border-radius: 12px; background: var(--surface); color: var(--ink); font-size: var(--t-action); font-weight: 700; text-decoration: none; }
 .wa-btn svg { color: #1E9E50; }

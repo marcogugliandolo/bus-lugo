@@ -1838,14 +1838,122 @@ function checkAlert() {
     if (minutes === null) return alert.at > Date.now();
     if (minutes - c.t > alert.before) return true;
     if (alert.at < Date.now() - 10 * 60000) return false;
-    const vars = { n: alert.number, stop: nice(alert.name), m: alert.before };
-    toast(kindOf(alert) === 'off' ? t('Prepárate: en unos {m} min llegas a {stop}', vars) : t('La línea {n} llega a {stop} en unos {m} min', vars));
-    try {
-      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-    } catch { /* el aviso en pantalla ya está dado */ }
+    ring({ ...alert, stopIndex: index });
     return false;
   });
   if (state.alerts.length !== before) saveAlerts();
+}
+
+/* ---------- El aviso en pantalla: «¡Ya viene!» a toda pantalla, con el color de la línea ---------- */
+let ringing = null;
+let chime = null;
+
+/** Dos notas suaves, como un timbre. Solo suena si el navegador lo deja (la persona ya tocó la campana). */
+function playChime() {
+  try {
+    chime ??= new (window.AudioContext || window.webkitAudioContext)();
+    if (chime.state === 'suspended') chime.resume();
+    const start = chime.currentTime + 0.05;
+    [[880, 0], [660, 0.22]].forEach(([freq, delay]) => {
+      const osc = chime.createOscillator();
+      const gain = chime.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.0001, start + delay);
+      gain.gain.exponentialRampToValueAtTime(0.25, start + delay + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + delay + 0.6);
+      osc.connect(gain).connect(chime.destination);
+      osc.start(start + delay);
+      osc.stop(start + delay + 0.65);
+    });
+  } catch { /* sin sonido: queda la vibración y la pantalla */ }
+}
+
+function ringLeft(r) {
+  const minutes = minutesFor(r.key, r.stopIndex);
+  return minutes === null ? null : minutes - clock().t;
+}
+
+function ringCount(r) {
+  const left = ringLeft(r);
+  if (left === null || left < -1) return { big: '', unit: t('Ya ha pasado') };
+  if (left < 1) return { big: '', unit: r.kind === 'off' ? t('Llegando a tu parada') : t('Llegando') };
+  return { big: String(Math.round(left)), unit: 'min' };
+}
+
+function ringHTML(r) {
+  const { line, dir } = keyParts(r.key);
+  const off = r.kind === 'off';
+  const minutes = minutesFor(r.key, r.stopIndex);
+  const live = liveOf(r.key);
+  const count = ringCount(r);
+  const left = ringLeft(r);
+  const snooze = left !== null && left > 3 ? `<button type="button" class="ring-snooze" data-ring="snooze">${t('Avísame otra vez a 2 min')}</button>` : '';
+  return `<div class="ring-card">
+      <p class="ring-eyebrow"><span class="ring-bell">${BELL}</span>Xa Vén</p>
+      <h2 id="ring-title" class="ring-title">${off ? t('¡Prepárate para bajar!') : t('¡Ya viene!')}</h2>
+      <p class="ring-line"><span class="ring-badge">${esc(line?.number ?? r.number)}</span><span>${t('Hacia {dest}', { dest: esc(nice(dir?.dest ?? '')) })}</span></p>
+      <p class="ring-count" aria-live="polite"><strong id="ring-big">${count.big}</strong><span id="ring-unit">${esc(count.unit)}</span></p>
+      <p class="ring-stop">${esc(off ? t('Te bajas en {stop}', { stop: nice(r.name) }) : t('En {stop}', { stop: nice(r.name) }))}${minutes !== null ? ` · ${formatMinutes(minutes)}` : ''}</p>
+      <p class="ring-src">${live ? `<i></i>${t('En directo, visto desde el bus')}` : t('Según horario')}</p>
+      <div class="ring-actions">
+        <button type="button" class="ring-go" data-ring="go">${t('Ver dónde está')}</button>
+        <button type="button" class="ring-ok" data-ring="ok">${t('Vale')}</button>
+      </div>${snooze}
+    </div>`;
+}
+
+function ring(alert) {
+  const { line } = keyParts(alert.key);
+  ringing = { key: alert.key, stopId: alert.stopId, stopIndex: alert.stopIndex, kind: kindOf(alert), name: alert.name, number: alert.number };
+  let el = $('#ring');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'ring';
+    el.className = 'ring';
+    el.setAttribute('role', 'alertdialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'ring-title');
+    el.addEventListener('click', onRingClick);
+    document.body.append(el);
+  }
+  el.style.setProperty('--c', line?.color ?? '#121416');
+  el.innerHTML = ringHTML(ringing);
+  el.hidden = false;
+  requestAnimationFrame(() => el.querySelector('.ring-go')?.focus({ focusVisible: false }));
+  try { navigator.vibrate?.([250, 120, 250, 120, 400]); } catch { /* sin vibración */ }
+  if (document.visibilityState === 'visible') playChime();
+}
+
+/** Cada segundo: los minutos que faltan; a los dos minutos de pasar el bus, se cierra solo. */
+function updateRing() {
+  if (!ringing) return;
+  const count = ringCount(ringing);
+  const big = $('#ring-big');
+  if (big && big.textContent !== count.big) big.textContent = count.big;
+  const unit = $('#ring-unit');
+  if (unit && unit.textContent !== count.unit) unit.textContent = count.unit;
+  const left = ringLeft(ringing);
+  if (left !== null && left < -2) closeRing();
+}
+
+function closeRing() {
+  ringing = null;
+  const el = $('#ring');
+  if (el) el.hidden = true;
+}
+
+async function onRingClick(e) {
+  const action = e.target.closest('[data-ring]')?.dataset.ring;
+  if (!action || !ringing) return;
+  const r = ringing;
+  closeRing();
+  if (action === 'go') selectBus(r.key);
+  else if (action === 'snooze') {
+    await setAlert({ key: r.key, stopId: r.stopId, stopIndex: r.stopIndex, kind: r.kind, before: 2 });
+    renderSheet();
+    toast(t('Te avisamos otra vez 2 min antes'));
+  }
 }
 
 let toastTimer = 0;
@@ -2634,6 +2742,7 @@ async function start() {
     renderClock();
     updateApproach();
     checkAlert();
+    updateRing();
     if (state.view === 'stop') loadStopExtras();
   }, 1000);
   setInterval(() => followCamera(), 4000);
