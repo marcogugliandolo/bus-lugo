@@ -288,7 +288,6 @@ export const GL = {
   "¿Algo no cuadra?": "Algo non cadra?",
   "Instalar Xa Vén": "Instalar Xa Vén",
   "Se abre como una app y te llegan los avisos": "Ábrese coma unha app e chéganche os avisos",
-  "Avísanos de una hora, una parada o un recorrido que esté mal": "Avísanos dunha hora, unha parada ou un percorrido que estea mal",
   "Actualizado el {date}": "Actualizado o {date}",
   "Hasta el {date}": "Ata o {date}",
   "Ahora no hay avisos de obras ni cambios en las líneas.": "Agora non hai avisos de obras nin cambios nas liñas.",

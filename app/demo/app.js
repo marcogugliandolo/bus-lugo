@@ -1610,8 +1610,7 @@ function menuHTML() {
       <button type="button" class="row" data-act="sim"><span class="to">${t('Ver otra hora')}<small>${esc(simText)}</small></span></button>
       <a class="row" href="pantalla.html"><span class="to">${t('Pantalla para un bar, una tienda o la entrada de casa')}<small>${t('Los próximos buses de una parada, en grande')}</small></span></a>
       ${canInstall() ? `<button type="button" class="row" data-act="install"><span class="to">${t('Instalar Xa Vén')}<small>${t('Se abre como una app y te llegan los avisos')}</small></span></button>` : ''}
-      <button type="button" class="row" data-act="report"><span class="to">${t('¿Algo no cuadra?')}<small>${t('Avísanos de una hora, una parada o un recorrido que esté mal')}</small></span></button>
-    </div>${prefs()}${foot({ report: false })}`;
+    </div>${prefs()}${foot()}`;
 }
 
 function simHTML() {
