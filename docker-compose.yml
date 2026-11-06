@@ -1,4 +1,4 @@
-# Xa Vén · simulación en directo de los buses urbanos en /demo
+# Xa Vén · los buses urbanos de Lugo en /demo, más una página por parada y por línea
 # Stack para Portainer: pega este fichero en Stacks > Add stack > Web editor.
 #
 # Al arrancar, el contenedor descarga la rama indicada del repositorio de GitHub
@@ -9,14 +9,20 @@
 # En NPM: bus.marcogugliandolo.com -> http://bus-lugo:3000
 # La ubicación del móvil solo funciona con https.
 #
-# El servicio bus-lugo-push envía los avisos al móvil. No publica ningún puerto y crea
-# sus claves la primera vez en el volumen bus-lugo-avisos; no hay que configurar nada.
+# El servicio bus-lugo-push es la API (/api/...): envía los avisos al móvil, recibe la posición
+# de quien va en el bus y la reparte, guarda el historial de retrasos y prepara los autobuses
+# de la Xunta. No publica ningún puerto y guarda todo en el volumen bus-lugo-avisos (claves,
+# avisos pendientes, retrasos, interurbanos); no hay que configurar nada.
 #
 # Variables opcionales (Portainer > Environment variables):
 #   BUS_PORT      puerto del servidor (por defecto 3091)
 #   BUS_REPO      usuario/repositorio (por defecto marcogugliandolo/bus-lugo)
 #   BUS_BRANCH    rama (por defecto main)
 #   GITHUB_TOKEN  solo si el repositorio es privado (token con permiso de lectura)
+#   OPERADOR      1 para enseñar en cada parada los minutos de su sistema de información
+#                 (la página del QR de los postes). Apagado si no se pone. Ver README.
+#   INTERURBANOS  0 para no descargar los horarios de los autobuses de la Xunta
+#   GTFS_URL      otra dirección para el GTFS de la Xunta
 
 services:
   bus-lugo:
@@ -98,7 +104,11 @@ services:
       BRANCH: ${BUS_BRANCH:-main}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
       DATA_DIR: /data
+      RED_DIR: /srv/avisos/red
       PUSH_SUBJECT: https://bus.marcogugliandolo.com
+      OPERADOR: ${OPERADOR:-}
+      INTERURBANOS: ${INTERURBANOS:-1}
+      GTFS_URL: ${GTFS_URL:-}
       TZ: Europe/Madrid
     entrypoint: ["/bin/sh", "-c"]
     command:
@@ -121,6 +131,10 @@ services:
           SRC=$$(find "$$TMP" -mindepth 1 -maxdepth 1 -type d | head -n 1)
           if [ -f "$$SRC/server/push.mjs" ]; then
             cp -r "$$SRC/server/." "$$APP/"
+            # La red de buses y el motor de horarios, los mismos que usa la web.
+            mkdir -p "$$APP/red/data"
+            cp "$$SRC/app/demo/sim.js" "$$APP/red/sim.js"
+            cp "$$SRC/app/demo/data/network.json" "$$APP/red/data/network.json"
           fi
         fi
         rm -rf "$$TMP"

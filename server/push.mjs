@@ -1,10 +1,16 @@
-// Xa Vén: guarda los avisos que pide cada móvil y envía la notificación a su hora.
-// Las claves del envío se crean aquí la primera vez y se quedan en el volumen de datos.
+// Xa Vén: el servidor de la web. Guarda los avisos que pide cada móvil y envía la notificación
+// a su hora; además recibe la posición de quien va en el bus (vivo.mjs), lleva el historial de
+// retrasos, los autobuses de la Xunta (interurbanos.mjs) y, si se activa, los minutos de las paradas
+// (operador.mjs). Las claves del envío se crean aquí la primera vez y se quedan en el volumen de datos.
 import http from 'node:http';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import webpush from 'web-push';
+import { createLive } from './vivo.mjs';
+import { createStopTimes } from './operador.mjs';
+import { createCoaches } from './interurbanos.mjs';
+import { loadNetwork } from './red.mjs';
 
 const MAX_PENDING = 2000;
 const MAX_PER_PHONE = 10;
@@ -43,7 +49,7 @@ function saveJSON(path, value, mode = 0o600) {
   renameSync(tmp, path);
 }
 
-export function createService({ dataDir, send = webpush.sendNotification.bind(webpush), subject = 'https://bus.marcogugliandolo.com', now = Date.now }) {
+export function createService({ dataDir, send = webpush.sendNotification.bind(webpush), subject = 'https://bus.marcogugliandolo.com', now = Date.now, net = null, sim = null, stopTimes: stopTimesOptions = {}, coaches: coachOptions = {} }) {
   mkdirSync(dataDir, { recursive: true });
   const keysPath = join(dataDir, 'claves.json');
   const avisosPath = join(dataDir, 'avisos.json');
@@ -81,9 +87,22 @@ export function createService({ dataDir, send = webpush.sendNotification.bind(we
     res.end(value === undefined ? '' : JSON.stringify(value));
   };
 
-  const server = http.createServer((req, res) => {
+  const live = net ? createLive({ net, sim, dataDir, now }) : null;
+  const stopTimes = net ? createStopTimes({ net, now, ...stopTimesOptions }) : null;
+  const coaches = net ? createCoaches({ net, sim, dataDir, now, ...coachOptions }) : null;
+  const modules = [live, stopTimes, coaches].filter(Boolean);
+
+  const server = http.createServer(async (req, res) => {
     const path = new URL(req.url, 'http://x').pathname;
     if (req.method === 'GET' && path === '/health') return reply(res, 200, { ok: true });
+    const from = String(req.headers['x-real-ip'] ?? req.socket.remoteAddress);
+    try {
+      for (const mod of modules) if (await mod.handle(req, res, path, from)) return undefined;
+    } catch (err) {
+      console.warn(`[api] ${err?.message}`);
+      if (!res.headersSent) return reply(res, 500, { error: 'error interno' });
+      return undefined;
+    }
     if (req.method === 'GET' && path === '/api/avisos/clave') return reply(res, 200, { key: keys.publicKey });
     const del = path.match(/^\/api\/avisos\/([0-9a-f-]{36})$/i);
     if (req.method === 'DELETE' && del) {
@@ -129,12 +148,18 @@ export function createService({ dataDir, send = webpush.sendNotification.bind(we
     return undefined;
   });
 
-  return { server, tick, publicKey: keys.publicKey, pending: () => avisos.length };
+  return { server, tick, publicKey: keys.publicKey, pending: () => avisos.length, live, stopTimes, coaches };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  const service = createService({ dataDir: process.env.DATA_DIR ?? '/data', subject: process.env.PUSH_SUBJECT ?? undefined });
-  service.server.listen(3001, () => console.log('[avisos] escuchando en 3001'));
+  let network = { net: null, sim: null };
+  try {
+    network = await loadNetwork();
+  } catch (err) {
+    console.warn(`[api] sin red de buses (${err?.message}): solo funcionan los avisos`);
+  }
+  const service = createService({ dataDir: process.env.DATA_DIR ?? '/data', subject: process.env.PUSH_SUBJECT ?? undefined, ...network });
+  service.server.listen(3001, () => console.log(`[api] escuchando en 3001${process.env.OPERADOR === '1' ? ', con los minutos de las paradas' : ''}`));
   let busy = false;
   setInterval(async () => {
     if (busy) return;
@@ -142,6 +167,9 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     try { await service.tick(); } catch (err) { console.warn(`[avisos] ${err?.message}`); }
     busy = false;
   }, 10000);
+  setInterval(() => { try { service.live?.fold(); } catch (err) { console.warn(`[vivo] ${err?.message}`); } }, 60000);
+  setTimeout(() => service.coaches?.tick(), 30000);
+  setInterval(() => service.coaches?.tick(), 10 * 60000);
   const stop = () => service.server.close(() => process.exit(0));
   process.on('SIGTERM', stop);
   process.on('SIGINT', stop);
