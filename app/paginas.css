@@ -1,0 +1,41 @@
+/* Xa Vén: páginas de paradas y líneas. Ligeras, legibles y sin JavaScript. */
+@font-face { font-family: "Atkinson Hyperlegible Next"; font-weight: 400; font-display: swap; src: url(/demo/vendor/fonts/atkinson-hyperlegible-next-latin-400-normal.woff2) format("woff2"); }
+@font-face { font-family: "Atkinson Hyperlegible Next"; font-weight: 700; font-display: swap; src: url(/demo/vendor/fonts/atkinson-hyperlegible-next-latin-700-normal.woff2) format("woff2"); }
+@font-face { font-family: "Bricolage Grotesque"; font-weight: 700; font-display: swap; src: url(/demo/vendor/fonts/bricolage-grotesque-latin-700-normal.woff2) format("woff2"); }
+:root { --bg: #FFFFFF; --soft: #F0F2F0; --rule: #E2E5E2; --ink: #121416; --mute: #4A5158; color-scheme: light dark; }
+@media (prefers-color-scheme: dark) { :root { --bg: #14171B; --soft: #1F242A; --rule: #2C3238; --ink: #F4F5F2; --mute: #BCC3CA; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.5 "Atkinson Hyperlegible Next", system-ui, sans-serif; }
+a { color: inherit; text-underline-offset: 3px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; max-width: 860px; margin: 0 auto; padding: 14px 20px; }
+.brand { display: flex; align-items: center; gap: 8px; font: 700 21px "Bricolage Grotesque", system-ui, sans-serif; text-decoration: none; }
+.brand img { border-radius: 7px; }
+.top nav { display: flex; gap: 16px; font-weight: 700; }
+main { max-width: 860px; margin: 0 auto; padding: 4px 20px 32px; }
+h1 { display: flex; align-items: center; gap: 12px; margin: 6px 0 4px; font: 700 clamp(28px, 6vw, 40px)/1.1 "Bricolage Grotesque", system-ui, sans-serif; letter-spacing: -.01em; }
+h2 { margin: 32px 0 10px; font-size: 21px; }
+h3 { display: flex; align-items: center; gap: 10px; margin: 18px 0 8px; font-size: 18px; }
+.crumbs, .sub, .note, .facts { color: var(--mute); }
+.crumbs { margin: 8px 0 0; font-size: 15px; }
+.sub { margin: 0 0 16px; }
+.note { font-size: 15px; }
+.cta { display: inline-block; margin: 6px 0 4px; padding: 14px 20px; border-radius: 12px; background: var(--ink); color: var(--bg); font-weight: 700; text-decoration: none; }
+.badge { flex: none; display: inline-block; min-width: 40px; padding: 0 8px; border-radius: 8px; background: var(--c); color: #FFFFFF; font-weight: 700; line-height: 30px; text-align: center; }
+h1 .badge { min-width: 52px; line-height: 42px; font-size: 26px; border-radius: 10px; }
+.lines { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.lines a { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 12px; background: var(--soft); text-decoration: none; }
+.lines small { display: block; color: var(--mute); font-size: 14px; }
+.near { margin: 0; padding-left: 20px; columns: 2 260px; }
+.near li { break-inside: avoid; margin-bottom: 6px; }
+.near small { color: var(--mute); }
+.stops { padding-left: 24px; }
+.stops li { margin-bottom: 4px; }
+.stops small { color: var(--mute); }
+.tt { margin-top: 8px; }
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 15px; }
+th, td { padding: 6px 10px; border-bottom: 1px solid var(--rule); text-align: left; vertical-align: top; }
+thead th { color: var(--mute); font-size: 14px; }
+tbody th { width: 3.5em; color: var(--mute); }
+.empty { color: var(--mute); }
+.foot { max-width: 860px; margin: 0 auto; padding: 20px; border-top: 1px solid var(--rule); color: var(--mute); font-size: 14px; }
