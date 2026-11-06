@@ -75,7 +75,6 @@ export const GL = {
   "Toca un bus o una parada para saber cuándo llega": "Toca un bus ou unha parada para saber cando chega",
   "Cómo llegar a un sitio": "Como chegar a un sitio",
   "Ver la parada más cercana": "Ver a parada máis próxima",
-  "Ver todas las líneas": "Ver todas as liñas",
   "Con la campana te avisamos antes de que llegue tu bus, aunque tengas el móvil bloqueado.": "Coa campá avisámoste antes de que chegue o teu bus, aínda que teñas o móbil bloqueado.",
   "Guarda tus paradas con la estrella y las verás aquí al abrir.": "Garda as túas paradas coa estrela e verás aquí os seus buses ao abrir.",
   "En directo: lo comparte alguien que va dentro": "En directo: compárteo alguén que vai dentro",

@@ -1166,7 +1166,6 @@ function homeHTML() {
     <div class="buttons one">
       <button type="button" class="cta" data-act="plan">${t('Cómo llegar a un sitio')}</button>
       <button type="button" class="cta second" data-act="near">${t('Ver la parada más cercana')}</button>
-      <button type="button" class="cta second" data-act="menu">${t('Ver todas las líneas')}</button>
     </div>${wake}${installCard()}
     <ul class="tips">
       <li><span class="tip-icon" aria-hidden="true">${BELL}</span>${t('Con la campana te avisamos antes de que llegue tu bus, aunque tengas el móvil bloqueado.')}</li>
