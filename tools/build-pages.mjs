@@ -7,6 +7,7 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { prepare, distanceMetres } from '../app/demo/sim.js';
+import { PRIVACY } from './privacidad.mjs';
 
 const SITE = (process.env.SITIO || 'https://bus.marcogugliandolo.com').replace(/\/$/, '');
 const APP = fileURLToPath(new URL('../app/', import.meta.url));
@@ -41,15 +42,22 @@ const numbers = [...new Map(net.lines.map((l) => [l.number, l])).values()];
 const lineSlug = (number) => slug(number);
 const routeOf = (line) => ROUTES[line.number] ?? line.name;
 
-function page({ title, description, path, body, jsonld }) {
+const CHROME = {
+  es: { lines: 'Líneas', stops: 'Paradas', about: 'Xa Vén: los buses urbanos de Lugo. Web no oficial. Horas según el horario de cada línea: el bus puede adelantarse o retrasarse.', open: 'Abrir Xa Vén', allLines: 'Todas las líneas', allStops: 'Todas las paradas', privacy: 'Privacidad', privacyPath: '/privacidad/' },
+  gl: { lines: 'Liñas', stops: 'Paradas', about: 'Xa Vén: os buses urbanos de Lugo. Web non oficial. Horas segundo o horario de cada liña: o bus pode adiantarse ou atrasarse.', open: 'Abrir Xa Vén', allLines: 'Todas as liñas', allStops: 'Todas as paradas', privacy: 'Privacidade', privacyPath: '/privacidade/' },
+};
+
+function page({ title, description, path, body, jsonld, lang = 'es', alternates = null }) {
+  const c = CHROME[lang];
   return `<!doctype html>
-<html lang="es">
+<html lang="${lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(description)}">
 <link rel="canonical" href="${SITE}${path}">
+${alternates ? Object.entries(alternates).map(([l, href]) => `<link rel="alternate" hreflang="${l}" href="${SITE}${href}">`).join('\n') : ''}
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:url" content="${SITE}${path}">
@@ -60,11 +68,11 @@ function page({ title, description, path, body, jsonld }) {
 ${jsonld ? `<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g, '\\u003c')}</script>` : ''}
 </head>
 <body>
-<header class="top"><a class="brand" href="/demo/"><img src="/demo/icon.svg" width="28" height="28" alt="">Xa Vén</a><nav><a href="/lineas/">Líneas</a><a href="/paradas/">Paradas</a></nav></header>
+<header class="top"><a class="brand" href="/demo/"><img src="/demo/icon.svg" width="28" height="28" alt="">Xa Vén</a><nav><a href="/lineas/">${c.lines}</a><a href="/paradas/">${c.stops}</a></nav></header>
 <main>
 ${body}
 </main>
-<footer class="foot"><p>Xa Vén: los buses urbanos de Lugo. Web no oficial. Horas según el horario de cada línea: el bus puede adelantarse o retrasarse.</p><p><a href="/demo/">Abrir Xa Vén</a> · <a href="/lineas/">Todas las líneas</a> · <a href="/paradas/">Todas las paradas</a></p></footer>
+<footer class="foot"><p>${c.about}</p><p><a href="/demo/">${c.open}</a> · <a href="/lineas/">${c.allLines}</a> · <a href="/paradas/">${c.allStops}</a> · <a href="${c.privacyPath}">${c.privacy}</a></p></footer>
 </body>
 </html>
 `;
@@ -190,8 +198,17 @@ ${[...byLetter].map(([letter, list]) => `<h2>${esc(letter)}</h2><ul class="near"
   ];
 }
 
-const pages = [...net.stops.map(stopPage), ...numbers.map(linePage), ...indexPages()];
-for (const dir of ['parada', 'linea', 'paradas', 'lineas']) rmSync(join(APP, dir), { recursive: true, force: true });
+/** La página de privacidad, en castellano y en gallego. El texto está en tools/privacidad.mjs. */
+function privacyPages() {
+  const alternates = { es: '/privacidad/', gl: '/privacidade/' };
+  return Object.entries(PRIVACY).map(([lang, text]) => ({
+    path: alternates[lang],
+    html: page({ title: text.title, description: text.description, path: alternates[lang], body: text.body, lang, alternates }),
+  }));
+}
+
+const pages = [...net.stops.map(stopPage), ...numbers.map(linePage), ...indexPages(), ...privacyPages()];
+for (const dir of ['parada', 'linea', 'paradas', 'lineas', 'privacidad', 'privacidade']) rmSync(join(APP, dir), { recursive: true, force: true });
 for (const p of pages) {
   const dir = join(APP, p.path);
   mkdirSync(dir, { recursive: true });
