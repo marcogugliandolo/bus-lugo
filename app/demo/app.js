@@ -822,7 +822,13 @@ const minutesHTML = (eta, live = false) => (eta === 0 ? t('Ahora') : `${live ? '
 const BACK_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>';
 const back = () => `<button type="button" class="back" data-act="back" aria-label="${t('Volver')}" title="${t('Volver')}">${BACK_ICON}</button>`;
 const privacyHref = () => (getLang() === 'gl' ? '/privacidade/' : '/privacidad/');
-const foot = ({ report = true } = {}) => `${report ? `<button type="button" class="link-btn" data-act="report">${t('¿Algo no cuadra? Avísanos')}</button>` : ''}<p class="foot">${t('Horas y posiciones según el horario, salvo las marcadas «en directo». Web no oficial.')} <a href="${privacyHref()}">${t('Privacidad')}</a></p>`;
+const SHIELD = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v5c0 4.6-3 8.4-7 10-4-1.6-7-5.4-7-10V6z"></path><path d="M9 12l2 2 4-4" stroke-linecap="round"></path></svg>';
+const BUBBLE = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H10l-5 4v-4H4z"></path><path d="M12 8.5v3M12 13.8v.2" stroke-linecap="round"></path></svg>';
+/** El pie de cada pantalla: «¿Algo no cuadra?» y privacidad, con aire, y la nota del horario debajo. */
+const foot = ({ report = true, note = true } = {}) => `<footer class="end"><nav class="end-links" aria-label="${t('Más')}">
+    ${report ? `<button type="button" data-act="report">${BUBBLE}${t('¿Algo no cuadra?')}</button>` : ''}
+    <a href="${privacyHref()}">${SHIELD}${t('Privacidad')}</a></nav>
+    ${note ? `<p class="foot">${t('Horas y posiciones según el horario, salvo las marcadas «en directo». Web no oficial.')}</p>` : ''}</footer>`;
 const mapCredit = () => t('Mapa: OpenFreeMap © OpenMapTiles. Datos y búsqueda de sitios: © OpenStreetMap, Photon.');
 
 const BELL = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>';
@@ -1128,7 +1134,7 @@ function homeHTML() {
       ${state.favs.length ? '' : `<li><span class="tip-icon" aria-hidden="true">${STAR}</span>${t('Guarda tus paradas con la estrella y las verás aquí al abrir.')}</li>`}
     </ul>
     <p class="legend"><span><i class="lg-sched"></i>${t('Según horario')}</span><span><i class="lg-live"></i>${t('En directo, visto desde el bus')}</span></p>
-    ${prefs()}<p class="foot home-foot"><a href="${privacyHref()}">${t('Privacidad')}</a> · <button type="button" class="link-btn" data-act="report">${t('¿Algo no cuadra?')}</button></p>`;
+    ${prefs()}${foot({ note: false })}`;
 }
 
 const nowCardWithNote = ({ card, note }) => `${card}${note ? `<p class="wait-note">${esc(note)}</p>` : ''}`;
