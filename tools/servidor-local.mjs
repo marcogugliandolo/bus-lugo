@@ -14,7 +14,14 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '
 
 mkdirSync(DATA, { recursive: true });
 const network = await loadNetwork();
-const api = createService({ dataDir: DATA, ...network, coaches: { enabled: process.env.INTERURBANOS === '1' } });
+const api = createService({
+  dataDir: DATA,
+  ...network,
+  coaches: { enabled: process.env.INTERURBANOS === '1' },
+  works: { file: fileURLToPath(new URL('../app/demo/data/obras.json', import.meta.url)) },
+  reports: { base: `http://localhost:${Number(process.env.PUERTO) || 8080}` },
+});
+console.log(`Mensajes de «¿Algo no cuadra?»: ${api.reports.link()}`);
 setInterval(() => api.tick().catch(() => {}), 10000);
 setInterval(() => api.live?.fold(), 60000);
 

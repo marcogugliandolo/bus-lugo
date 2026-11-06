@@ -11,8 +11,12 @@
 #
 # El servicio bus-lugo-push es la API (/api/...): envía los avisos al móvil, recibe la posición
 # de quien va en el bus y la reparte, guarda el historial de retrasos y prepara los autobuses
-# de la Xunta. No publica ningún puerto y guarda todo en el volumen bus-lugo-avisos (claves,
-# avisos pendientes, retrasos, interurbanos); no hay que configurar nada.
+# de la Xunta. También lee cada 10 minutos los avisos de obras (app/demo/data/obras.json en GitHub)
+# y guarda los mensajes de «¿Algo no cuadra?». No publica ningún puerto y guarda todo en el volumen
+# bus-lugo-avisos (claves, avisos pendientes, retrasos, interurbanos, mensajes); no hay que configurar nada.
+#
+# Los mensajes de «¿Algo no cuadra?» se leen en https://bus.marcogugliandolo.com/api/reportes/ver?clave=…
+# La dirección completa, con su clave, sale en los registros de bus-lugo-push al arrancar.
 #
 # Variables opcionales (Portainer > Environment variables):
 #   BUS_PORT      puerto del servidor (por defecto 3091)
@@ -23,6 +27,9 @@
 #                 (la página del QR de los postes). Apagado si no se pone. Ver README.
 #   INTERURBANOS  0 para no descargar los horarios de los autobuses de la Xunta
 #   GTFS_URL      otra dirección para el GTFS de la Xunta
+#   NTFY_URL      para que te llegue un aviso al móvil (app ntfy) con cada mensaje de «¿Algo no cuadra?»,
+#                 por ejemplo https://ntfy.sh/un-nombre-largo-que-solo-sepas-tu. Solo lleva el tipo y el sitio.
+#   REPORTES_CLAVE otra clave para leer los mensajes (si no se pone, se crea sola la primera vez)
 
 services:
   bus-lugo:
@@ -109,6 +116,8 @@ services:
       OPERADOR: ${OPERADOR:-}
       INTERURBANOS: ${INTERURBANOS:-1}
       GTFS_URL: ${GTFS_URL:-}
+      NTFY_URL: ${NTFY_URL:-}
+      REPORTES_CLAVE: ${REPORTES_CLAVE:-}
       TZ: Europe/Madrid
     entrypoint: ["/bin/sh", "-c"]
     command:

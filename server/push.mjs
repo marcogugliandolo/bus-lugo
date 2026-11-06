@@ -1,7 +1,7 @@
 // Xa Vén: el servidor de la web. Guarda los avisos que pide cada móvil y envía la notificación
 // a su hora; además recibe la posición de quien va en el bus (vivo.mjs), lleva el historial de
 // retrasos, los autobuses de la Xunta (interurbanos.mjs) y, si se activa, los minutos de las paradas
-// (operador.mjs). Las claves del envío se crean aquí la primera vez y se quedan en el volumen de datos.
+// (operador.mjs), los avisos de obras (obras.mjs) y los mensajes de «¿Algo no cuadra?» (reportes.mjs). Las claves del envío se crean aquí la primera vez y se quedan en el volumen de datos.
 import http from 'node:http';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -10,6 +10,8 @@ import webpush from 'web-push';
 import { createLive } from './vivo.mjs';
 import { createStopTimes } from './operador.mjs';
 import { createCoaches } from './interurbanos.mjs';
+import { createWorks } from './obras.mjs';
+import { createReports } from './reportes.mjs';
 import { loadNetwork } from './red.mjs';
 
 const MAX_PENDING = 2000;
@@ -49,7 +51,7 @@ function saveJSON(path, value, mode = 0o600) {
   renameSync(tmp, path);
 }
 
-export function createService({ dataDir, send = webpush.sendNotification.bind(webpush), subject = 'https://bus.marcogugliandolo.com', now = Date.now, net = null, sim = null, stopTimes: stopTimesOptions = {}, coaches: coachOptions = {} }) {
+export function createService({ dataDir, send = webpush.sendNotification.bind(webpush), subject = 'https://bus.marcogugliandolo.com', now = Date.now, net = null, sim = null, stopTimes: stopTimesOptions = {}, coaches: coachOptions = {}, works: worksOptions = {}, reports: reportsOptions = {} }) {
   mkdirSync(dataDir, { recursive: true });
   const keysPath = join(dataDir, 'claves.json');
   const avisosPath = join(dataDir, 'avisos.json');
@@ -90,7 +92,9 @@ export function createService({ dataDir, send = webpush.sendNotification.bind(we
   const live = net ? createLive({ net, sim, dataDir, now }) : null;
   const stopTimes = net ? createStopTimes({ net, now, ...stopTimesOptions }) : null;
   const coaches = net ? createCoaches({ net, sim, dataDir, now, ...coachOptions }) : null;
-  const modules = [live, stopTimes, coaches].filter(Boolean);
+  const works = createWorks(worksOptions);
+  const reports = createReports({ dataDir, now, ...reportsOptions });
+  const modules = [live, stopTimes, coaches, works, reports].filter(Boolean);
 
   const server = http.createServer(async (req, res) => {
     const path = new URL(req.url, 'http://x').pathname;
@@ -148,7 +152,7 @@ export function createService({ dataDir, send = webpush.sendNotification.bind(we
     return undefined;
   });
 
-  return { server, tick, publicKey: keys.publicKey, pending: () => avisos.length, live, stopTimes, coaches };
+  return { server, tick, publicKey: keys.publicKey, pending: () => avisos.length, live, stopTimes, coaches, works, reports };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
@@ -158,8 +162,21 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   } catch (err) {
     console.warn(`[api] sin red de buses (${err?.message}): solo funcionan los avisos`);
   }
-  const service = createService({ dataDir: process.env.DATA_DIR ?? '/data', subject: process.env.PUSH_SUBJECT ?? undefined, ...network });
-  service.server.listen(3001, () => console.log(`[api] escuchando en 3001${process.env.OPERADOR === '1' ? ', con los minutos de las paradas' : ''}`));
+  const env = process.env;
+  const service = createService({
+    dataDir: env.DATA_DIR ?? '/data',
+    subject: env.PUSH_SUBJECT ?? undefined,
+    ...network,
+    works: { repo: env.REPO || null, branch: env.BRANCH || 'main', token: env.GITHUB_TOKEN || '' },
+    reports: { key: env.REPORTES_CLAVE || '', notifyUrl: env.NTFY_URL || '', base: env.PUSH_SUBJECT || '' },
+  });
+  service.server.listen(3001, () => {
+    console.log(`[api] escuchando en 3001${env.OPERADOR === '1' ? ', con los minutos de las paradas' : ''}`);
+    console.log(`[reportes] para leer los mensajes de «¿Algo no cuadra?»: ${service.reports.link()}`);
+  });
+  service.works.tick();
+  setInterval(() => service.works.tick(), 10 * 60000);
+  setInterval(() => service.reports.prune(), 6 * 3600000);
   let busy = false;
   setInterval(async () => {
     if (busy) return;
