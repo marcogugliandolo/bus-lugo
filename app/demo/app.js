@@ -221,8 +221,31 @@ async function buildStyle() {
   };
 }
 
+/** Una flecha blanca que apunta hacia delante, para dibujarla a lo largo del recorrido. */
+function arrowImage() {
+  const size = 36;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const g = canvas.getContext('2d');
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  g.beginPath();
+  g.moveTo(12, 9);
+  g.lineTo(23, 18);
+  g.lineTo(12, 27);
+  g.strokeStyle = 'rgba(0, 0, 0, .35)';
+  g.lineWidth = 8;
+  g.stroke();
+  g.strokeStyle = '#FFFFFF';
+  g.lineWidth = 4.5;
+  g.stroke();
+  return g.getImageData(0, 0, size, size);
+}
+
 function addOverlays() {
   shownFocus = null;
+  shownEnds = '';
   const empty = { type: 'FeatureCollection', features: [] };
   map.addSource('routes', { type: 'geojson', data: routesData });
   map.addSource('bus-stops', { type: 'geojson', data: stopsData });
@@ -233,9 +256,12 @@ function addOverlays() {
   map.addSource('plan-walk', { type: 'geojson', data: empty });
   const round = { 'line-cap': 'round', 'line-join': 'round' };
   map.addLayer({ id: 'routes', type: 'line', source: 'routes', layout: round, paint: { 'line-color': ['get', 'color'], 'line-opacity': 0.34, 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 1, 15, 2.4, 18, 5] } });
-  map.addLayer({ id: 'route-sel', type: 'line', source: 'routes', layout: round, filter: ['==', ['get', 'number'], ''], paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 3, 15, 5, 18, 8] } });
+  map.addLayer({ id: 'route-sel', type: 'line', source: 'routes', layout: round, filter: ['==', ['get', 'number'], ''], paint: { 'line-color': ['get', 'color'], 'line-opacity': 0.4, 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 2, 15, 3.5, 18, 6] } });
   map.addLayer({ id: 'focus', type: 'line', source: 'focus', layout: round, paint: { 'line-color': ['get', 'color'], 'line-opacity': 0.35, 'line-width': 5 } });
-  map.addLayer({ id: 'approach', type: 'line', source: 'approach', layout: round, paint: { 'line-color': ['get', 'color'], 'line-width': 5 } });
+  map.addLayer({ id: 'approach', type: 'line', source: 'approach', layout: round, paint: { 'line-color': ['get', 'color'], 'line-width': ['interpolate', ['linear'], ['zoom'], 12, 4, 15, 6, 18, 9] } });
+  // Flechas sobre lo que le queda al bus: se ve hacia dónde va sin leer nada.
+  if (!map.hasImage('flecha')) map.addImage('flecha', arrowImage(), { pixelRatio: 2 });
+  map.addLayer({ id: 'approach-arrows', type: 'symbol', source: 'approach', layout: { 'symbol-placement': 'line', 'symbol-spacing': 80, 'icon-image': 'flecha', 'icon-size': ['interpolate', ['linear'], ['zoom'], 12, 0.9, 15, 1.2, 18, 1.5], 'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-rotation-alignment': 'map' } });
   map.addLayer({ id: 'bus-stops', type: 'circle', source: 'bus-stops', minzoom: 14.6, paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 14.6, 2.6, 16, 4.5], 'circle-color': token('--surface'), 'circle-stroke-color': token('--mute'), 'circle-stroke-width': 1.2 } });
   map.addLayer({ id: 'plan-walk', type: 'line', source: 'plan-walk', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': token('--mute'), 'line-width': 4, 'line-dasharray': [0.1, 2] } });
   map.addLayer({ id: 'plan-bus', type: 'line', source: 'plan-bus', layout: round, paint: { 'line-color': ['get', 'color'], 'line-width': 6 } });
@@ -394,7 +420,9 @@ function followCamera(duration = 900) {
     const mine = state.buses.filter((b) => b.line.number === state.lineNumber);
     const moving = mine.filter((b) => !b.parkedUntil);
     const list = moving.length ? moving : mine;
-    if (list.length) moveTo(list.map((b) => [b.lat, b.lng]), 15.8, duration);
+    // Cada bus y lo que le queda de recorrido: dónde está y hacia dónde va.
+    const points = list.flatMap((b) => (b.parkedUntil ? [[b.lat, b.lng]] : approachPath(b, b.dir.stops.length - 1)));
+    if (points.length) moveTo(points, 15.8, duration);
   } else if (state.view === 'ride' && state.ride) {
     const bus = state.busByKey.get(state.ride.key);
     const target = net.stopById.get(state.ride.dir.stops[state.ride.target]);
@@ -405,8 +433,9 @@ function followCamera(duration = 900) {
   } else if (['bus', 'ride-pick', 'ride-share'].includes(state.view)) {
     const bus = state.busByKey.get(state.busKey);
     if (bus) {
-      const next = net.stopById.get(bus.dir.stops[bus.nextStopIndex]);
-      moveTo(next && !bus.stopped ? [[bus.lat, bus.lng], [next.lat, next.lng]] : [[bus.lat, bus.lng]], BUS_ZOOM, duration);
+      // El bus y sus próximas paradas: se ve dónde está y por dónde va a ir.
+      const ahead = bus.parkedUntil ? [] : bus.dir.stops.slice(bus.nextStopIndex, bus.nextStopIndex + 3).map((id) => net.stopById.get(id)).filter(Boolean);
+      moveTo([[bus.lat, bus.lng], ...ahead.map((x) => [x.lat, x.lng])], BUS_ZOOM, duration);
     }
     else if (state.wait) {
       const first = net.stopById.get(state.wait.dir.stops[0]);
@@ -660,6 +689,27 @@ function updateDots() {
   map.getSource('route-dots')?.setData({ type: 'FeatureCollection', features });
 }
 
+/** Banderitas en el final del recorrido de los buses que se están mirando. */
+let shownEnds = '';
+let endPins = [];
+function updateEnds(ends) {
+  const unique = [...new Map(ends.filter((e) => e.id !== state.stopId).map((e) => [e.id, e])).values()];
+  const sig = `${getLang()}|${unique.map((e) => e.id).join(',')}`;
+  if (sig === shownEnds) return;
+  shownEnds = sig;
+  endPins.forEach((p) => p.remove());
+  endPins = unique.map((e) => {
+    const stop = net.stopById.get(e.id);
+    const el = document.createElement('div');
+    el.className = 'pin end';
+    el.style.setProperty('--c', e.color);
+    const tag = document.createElement('span');
+    tag.textContent = t('Final: {stop}', { stop: nice(stop.name) });
+    el.append(tag);
+    return new maplibregl.Marker({ element: el }).setLngLat([stop.lng, stop.lat]).addTo(map);
+  });
+}
+
 function updateApproach() {
   if (!mapReady) return;
   updateDots();
@@ -669,6 +719,19 @@ function updateApproach() {
   const focusSrc = map.getSource('focus');
   const approachSrc = map.getSource('approach');
   if (!focusSrc || !approachSrc) return;
+  if (state.view === 'line') {
+    // Con una línea elegida, cada bus lleva dibujado lo que le queda, con flechas, y su final.
+    const mine = state.buses.filter((b) => b.line.number === state.lineNumber && !b.parkedUntil);
+    if (shownFocus !== 'line') {
+      shownFocus = 'line';
+      focusSrc.setData(empty);
+    }
+    const ahead = mine.map((b) => ({ b, path: approachPath(b, b.dir.stops.length - 1) })).filter((x) => x.path.length > 1);
+    approachSrc.setData({ type: 'FeatureCollection', features: ahead.map((x) => asLine(x.path, { color: x.b.line.color })) });
+    updateEnds(ahead.map((x) => ({ id: x.b.dir.stops[x.b.dir.stops.length - 1], color: x.b.line.color })));
+    return;
+  }
+  updateEnds(bus && !bus.parkedUntil && ['bus', 'ride-pick', 'ride-share'].includes(state.view) ? [{ id: bus.dir.stops[bus.dir.stops.length - 1], color: bus.line.color }] : []);
   if (!bus) {
     const dir = state.view === 'bus' ? state.wait?.dir : null;
     if (shownFocus !== (dir ?? null)) {
@@ -1263,7 +1326,7 @@ function busCard(bus) {
   const nextText = atOrArriving
     ? (bus.nextStopIndex < stops.length - 1 ? t('Después va a {stop}', { stop: nice(after?.name ?? '') }) : t('Es el final del recorrido'))
     : (inMin ? t('Siguiente parada: {stop}, en {n} min', { stop: nice(next?.name ?? ''), n: inMin }) : t('Siguiente parada: {stop}', { stop: nice(next?.name ?? '') }));
-  return `<p class="card-title">${t('Hacia {dest}', { dest: esc(nice(bus.dir.dest)) })}</p>${nowCard(where.label, where.place, nextText, bus.key, undefined, bus.live ?? null)}${stripHTML(bus)}`;
+  return `<p class="card-title">${t('Hacia {dest}', { dest: esc(nice(bus.dir.dest)) })}</p>${nowCard(where.label, where.place, nextText, bus.key, undefined, bus.live ?? null)}${stripHTML(bus)}<button type="button" class="ghost route-all" data-act="follow" data-key="${esc(bus.key)}">${t('Ver todo el recorrido')}</button>`;
 }
 
 const shortDays = (days) => (/lunes a viernes/i.test(days) ? t('Lunes a viernes') : (/todos/i.test(days) ? t('Todos los días') : days));

@@ -290,6 +290,8 @@ export const GL = {
   "Abrir la pantalla": "Abrir a pantalla",
   "Para dejarla fija en una Raspberry Pi o un ordenador, abre esta dirección a pantalla completa:": "Para deixala fixa nunha Raspberry Pi ou nun ordenador, abre este enderezo a pantalla completa:",
   "Cambiar de parada": "Cambiar de parada",
+  "Final: {stop}": "Final: {stop}",
+  "Ver todo el recorrido": "Ver todo o percorrido",
 };
 
 function initial() {
