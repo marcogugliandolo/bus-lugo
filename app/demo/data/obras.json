@@ -1,0 +1,27 @@
+{
+  "_comoSeEdita": [
+    "Avisos de obras y cambios. Salen en el menú (Obras y cambios) y en cada línea afectada.",
+    "Edita este fichero en GitHub y guarda: la web lo coge sola en unos 10 minutos, sin reiniciar nada.",
+    "lineas: las líneas afectadas, escritas como en la web, por ejemplo \"7\" o \"1.2\".",
+    "desde: el aviso no sale antes de este día. hasta: se quita solo después de este día. Fechas AAAA-MM-DD.",
+    "Si no sabes cuándo acaban las obras, deja hasta vacío: el aviso se quita solo 60 días después de actualizado, para que no se quede uno viejo. Para que siga, pon la fecha de hoy en actualizado.",
+    "titulo y texto: es en castellano y gl en gallego. Si falta el gallego, sale en castellano.",
+    "Para quitar un aviso, borra su bloque { ... } entero (y la coma que lo separa del siguiente)."
+  ],
+  "avisos": [
+    {
+      "lineas": ["7", "8", "9", "12"],
+      "desde": "2026-11-02",
+      "hasta": "",
+      "actualizado": "2026-11-02",
+      "titulo": {
+        "es": "Cambios en las líneas 7, 8, 9 y 12 por obras",
+        "gl": "Cambios nas liñas 7, 8, 9 e 12 por obras"
+      },
+      "texto": {
+        "es": "El recorrido que ves en el mapa puede no incluir estos desvíos.",
+        "gl": "O percorrido que ves no mapa pode non incluír estes desvíos."
+      }
+    }
+  ]
+}

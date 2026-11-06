@@ -13,7 +13,7 @@
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
 <link rel="stylesheet" href="style.css">
-<script>try { var l = localStorage.getItem('xaven-lingua'); if (l === 'gl' || (!l && /^gl\b/i.test(navigator.language || ''))) document.documentElement.lang = 'gl'; } catch (e) {}</script>
+<script>try { var l = localStorage.getItem('xaven-lingua'); if (l === 'gl' || (!l && /^gl\b/i.test(navigator.language || ''))) document.documentElement.lang = 'gl'; if (localStorage.getItem('xaven-letra') === 'grande') document.documentElement.dataset.letra = 'grande'; } catch (e) {}</script>
 </head>
 <body>
 <div id="map" data-t-label="Mapa de Lugo con los buses en ruta" aria-label="Mapa de Lugo con los buses en ruta"></div>

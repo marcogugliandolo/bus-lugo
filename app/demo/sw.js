@@ -4,11 +4,11 @@
 // Con conexión siempre se pide la versión nueva (y se guarda); sin conexión, o si la red
 // tarda demasiado, se sirve la guardada. Así un cambio publicado llega en la siguiente visita.
 
-const CACHE = 'xaven-v2';
+const CACHE = 'xaven-v3';
 const CORE = [
   './', 'index.html', 'style.css', 'app.js', 'sim.js', 'plan.js', 'i18n.js', 'live.js',
-  'pantalla.html', 'pantalla.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png',
-  'data/network.json', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
+  'pantalla.html', 'pantalla.js', 'obras.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png',
+  'data/network.json', 'data/obras.json', 'vendor/maplibre-gl.js', 'vendor/maplibre-gl.css',
   'vendor/fonts/atkinson-hyperlegible-next-latin-400-normal.woff2',
   'vendor/fonts/atkinson-hyperlegible-next-latin-700-normal.woff2',
   'vendor/fonts/bricolage-grotesque-latin-700-normal.woff2',

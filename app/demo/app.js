@@ -3,16 +3,14 @@ import { planTrips, legPath, walkMinutes } from './plan.js';
 import { prepare, busesAt, arrivalsAt, approachPath, dayKind, formatMinutes, passTime, distanceMetres, projectOnPath, scheduledTimeAt, stopIndexAt } from './sim.js';
 import { t, getLang, setLang, translateDom } from './i18n.js';
 import { startLive, liveFor, liveKeys, setOwn, usualFor, stopTimesFor, coachesFor, sendPosition } from './live.js';
+import { activeWorks, localToday } from './obras.js';
 
 const TILES_CHECK = 'https://tiles.openfreemap.org/planet';
 const CITY_BOUNDS = [[-7.585, 42.992], [-7.53, 43.035]];
 // Los textos van en castellano y t() los pasa al gallego cuando toca.
-const NOTICES = [{
-  title: 'Cambios en las líneas 7, 8, 9 y 12 por obras',
-  lines: ['7', '8', '9', '12'],
-  body: 'El recorrido que ves en el mapa puede no incluir estos desvíos.',
-  date: 'Actualizado el 2 de noviembre de 2026',
-}];
+// Los avisos de obras están en data/obras.json, para cambiarlos sin tocar el código.
+let worksData = [];
+const currentWorks = () => activeWorks(worksData, localToday(), getLang());
 
 // Cómo llama el operador a cada línea (buslugo.com/lineas, 2 de noviembre de 2026).
 // Es lo que entiende quien no conoce la red; `hospital` marca las que llegan al HULA.
@@ -41,7 +39,7 @@ const ROUTES = {
 };
 const routeOf = (line) => t(ROUTES[line.number]?.route ?? line.name);
 const nice = (name) => String(name).replace(/^HULA \(Ent\. Personal\).*$/i, t('Hospital (entrada de personal)')).replace(/^HULA\b.*$/i, 'Hospital (HULA)');
-const hasWorks = (number) => NOTICES.some((n) => n.lines.includes(number));
+const hasWorks = (number) => currentWorks().some((n) => n.lines.includes(number));
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -85,6 +83,8 @@ const state = {
   ride: null,              // «Voy en este bus»
   ridePick: null,
   rideTarget: null,
+  report: null,            // «¿Algo no cuadra?»
+  returnTo: null,          // a dónde vuelve «Volver» desde el formulario o la instalación
 };
 
 /* ---------- Reloj: la hora de Lugo, viva donde viva quien mira ---------- */
@@ -821,7 +821,8 @@ function usualText(a) {
 const minutesHTML = (eta, live = false) => (eta === 0 ? t('Ahora') : `${live ? '<i class="live-dot"></i>' : ''}${eta}<small> min</small>`);
 const BACK_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>';
 const back = () => `<button type="button" class="back" data-act="back" aria-label="${t('Volver')}" title="${t('Volver')}">${BACK_ICON}</button>`;
-const foot = () => `<p class="foot">${t('Horas y posiciones según el horario, salvo las marcadas «en directo». Web no oficial.')}</p>`;
+const privacyHref = () => (getLang() === 'gl' ? '/privacidade/' : '/privacidad/');
+const foot = ({ report = true } = {}) => `${report ? `<button type="button" class="link-btn" data-act="report">${t('¿Algo no cuadra? Avísanos')}</button>` : ''}<p class="foot">${t('Horas y posiciones según el horario, salvo las marcadas «en directo». Web no oficial.')} <a href="${privacyHref()}">${t('Privacidad')}</a></p>`;
 const mapCredit = () => t('Mapa: OpenFreeMap © OpenMapTiles. Datos y búsqueda de sitios: © OpenStreetMap, Photon.');
 
 const BELL = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9a6 6 0 0 1 12 0c0 6 2 7 2 7H4s2-1 2-7"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>';
@@ -849,7 +850,7 @@ const isIOS = () => /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.pla
 function alertHelp() {
   if (!clock().live) return t('En la simulación, el aviso solo sale en esta pantalla.');
   if (canPush()) return t('Te llegará como notificación al móvil, aunque cierres la web. El navegador te pedirá permiso.');
-  if (isIOS()) return t('En iPhone, añade Xa Vén a la pantalla de inicio (Compartir › Añadir a inicio) y ábrela desde allí para recibir avisos. Si no, deja esta pantalla abierta.');
+  if (isIOS()) return `${t('En iPhone, los avisos llegan si instalas Xa Vén en la pantalla de inicio y la abres desde allí. Si no, deja esta pantalla abierta.')} <button type="button" class="link-btn" data-act="install">${t('Cómo se instala')}</button>`;
   return t('Este navegador no admite notificaciones: deja esta pantalla abierta para recibir el aviso.');
 }
 
@@ -1121,13 +1122,13 @@ function homeHTML() {
       <button type="button" class="cta" data-act="plan">${t('Cómo llegar a un sitio')}</button>
       <button type="button" class="cta second" data-act="near">${t('Ver la parada más cercana')}</button>
       <button type="button" class="cta second" data-act="menu">${t('Ver todas las líneas')}</button>
-    </div>${wake}
+    </div>${wake}${installCard()}
     <ul class="tips">
       <li><span class="tip-icon" aria-hidden="true">${BELL}</span>${t('Con la campana te avisamos antes de que llegue tu bus, aunque tengas el móvil bloqueado.')}</li>
       ${state.favs.length ? '' : `<li><span class="tip-icon" aria-hidden="true">${STAR}</span>${t('Guarda tus paradas con la estrella y las verás aquí al abrir.')}</li>`}
     </ul>
     <p class="legend"><span><i class="lg-sched"></i>${t('Según horario')}</span><span><i class="lg-live"></i>${t('En directo, visto desde el bus')}</span></p>
-    ${langSwitch()}`;
+    ${prefs()}<p class="foot home-foot"><a href="${privacyHref()}">${t('Privacidad')}</a> · <button type="button" class="link-btn" data-act="report">${t('¿Algo no cuadra?')}</button></p>`;
 }
 
 const nowCardWithNote = ({ card, note }) => `${card}${note ? `<p class="wait-note">${esc(note)}</p>` : ''}`;
@@ -1342,7 +1343,8 @@ function lineHTML() {
     const next = nextDepartureOf(state.lineNumber, c.kind, c.t);
     status = `<div class="now"><span class="now-text"><span class="now-label">${t('Ahora mismo')}</span><strong>${t('No hay ningún bus en la calle')}</strong><small>${next === null ? t('Hoy ya no hay más salidas de esta línea') : t('El próximo sale a las {time}', { time: formatMinutes(next) })}</small></span></div>`;
   }
-  const notice = hasWorks(state.lineNumber) ? `<div class="notice-item"><strong>${t('Cambios por obras')}</strong>${esc(t(NOTICES[0].body))}</div>` : '';
+  const work = currentWorks().find((n) => n.lines.includes(state.lineNumber));
+  const notice = work ? `<div class="notice-item"><strong>${t('Cambios por obras')}</strong>${esc(work.body || work.title)}</div>` : '';
   const toggle = `<button type="button" class="cta second" data-act="toggle-stops" aria-expanded="${state.showStops}">${state.showStops ? t('Ocultar paradas y horario') : t('Ver paradas y horario')}</button>`;
   let details = '';
   if (state.showStops) {
@@ -1556,27 +1558,214 @@ function menuHTML() {
     ? `<button type="button" class="cta second" data-act="toggle-idle" aria-expanded="${state.showIdle}">${state.showIdle ? t('Ocultar líneas sin buses') : idleText}</button>
        ${state.showIdle ? `<div class="rows">${idle.map(lineRow).join('')}</div>` : ''}`
     : '';
+  const works = currentWorks();
   return `<div class="head">${back()}<div><h1>${t('Líneas con buses ahora')}</h1><small>${t('Toca una para ver dónde está su bus')}</small></div></div>
     ${list}${idleBlock}
     <div class="rows">
-      <button type="button" class="row" data-act="notices"><span class="to">${t('Obras y cambios en las líneas')}</span><span class="count">${NOTICES.length}</span></button>
+      <button type="button" class="row" data-act="notices"><span class="to">${t('Obras y cambios en las líneas')}</span>${works.length ? `<span class="count">${works.length}</span>` : ''}</button>
       <button type="button" class="row" data-act="sim"><span class="to">${t('Ver otra hora')}<small>${esc(simText)}</small></span></button>
       <a class="row" href="pantalla.html"><span class="to">${t('Pantalla para un bar, una tienda o la entrada de casa')}<small>${t('Los próximos buses de una parada, en grande')}</small></span></a>
-    </div>${langSwitch()}${foot()}`;
+      ${canInstall() ? `<button type="button" class="row" data-act="install"><span class="to">${t('Instalar Xa Vén')}<small>${t('Se abre como una app y te llegan los avisos')}</small></span></button>` : ''}
+      <button type="button" class="row" data-act="report"><span class="to">${t('¿Algo no cuadra?')}<small>${t('Avísanos de una hora, una parada o un recorrido que esté mal')}</small></span></button>
+    </div>${prefs()}${foot({ report: false })}`;
 }
 
 function simHTML() {
   return `<div class="head">${back()}<div><h1>${t('Ver otra hora')}</h1><small>${t('Elige el momento que quieres ver')}</small></div></div>`;
 }
 
+const longDate = (iso) => new Intl.DateTimeFormat(getLang() === 'gl' ? 'gl-ES' : 'es-ES', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${iso}T12:00:00Z`));
+
 function noticesHTML() {
+  const works = currentWorks();
+  const items = works.map((n) => {
+    const dates = [n.updated && t('Actualizado el {date}', { date: longDate(n.updated) }), n.until && t('Hasta el {date}', { date: longDate(n.until) })].filter(Boolean).join(' · ');
+    return `<div class="notice-item"><strong>${esc(n.title)}</strong>${esc(n.body)}${dates ? `<small>${esc(dates)}</small>` : ''}</div>`;
+  }).join('');
   return `<div class="head">${back()}<div><h1>${t('Obras y cambios')}</h1></div></div>
-    ${NOTICES.map((n) => `<div class="notice-item"><strong>${esc(t(n.title))}</strong>${esc(t(n.body))}<small>${esc(t(n.date))}</small></div>`).join('')}
+    ${items || `<p class="empty">${t('Ahora no hay avisos de obras ni cambios en las líneas.')}</p>`}
     ${foot()}`;
+}
+
+/* ---------- «¿Algo no cuadra?» ---------- */
+const reportKinds = () => [
+  ['hora', t('La hora no coincide')],
+  ['no-paso', t('El bus no pasó')],
+  ['parada', t('La parada está mal o no existe')],
+  ['recorrido', t('El recorrido está mal')],
+  ['otro', t('Otra cosa')],
+];
+
+/** Lo que estaba mirando la persona, para saber a qué se refiere sin que tenga que explicarlo. */
+function reportContext() {
+  const c = clock();
+  const ctx = { vista: state.view, hora: formatMinutes(Math.floor(c.t)), simulado: !c.live, idioma: getLang() };
+  let label = '';
+  if (state.view === 'stop' && state.stopId) {
+    const stop = net.stopById.get(state.stopId);
+    ctx.parada = stop.id;
+    label = t('La parada {stop}', { stop: nice(stop.name) });
+  } else if ((state.view === 'bus' || state.view === 'ride') && state.busKey) {
+    const { line, dir } = keyParts(state.busKey);
+    ctx.bus = state.busKey;
+    ctx.linea = line?.number ?? '';
+    label = t('El bus de la línea {n} hacia {dest}', { n: line?.number ?? '', dest: nice(dir?.dest ?? '') });
+    if (state.stopId) ctx.parada = state.stopId;
+  } else if (state.view === 'line' && state.lineNumber) {
+    ctx.linea = state.lineNumber;
+    label = t('La línea {n}', { n: state.lineNumber });
+  } else if (state.view === 'plan' || state.view === 'trip') {
+    label = t('Cómo llegar a un sitio');
+  }
+  return { ctx, label };
+}
+
+function openReport() {
+  state.returnTo = state.view;
+  state.report = { ...reportContext(), values: { tipo: '', texto: '', contacto: '' }, sending: false, sent: false, error: '' };
+  go('report');
+}
+
+function reportHTML() {
+  const r = state.report;
+  if (r.sent) {
+    return `<div class="head">${back()}<div><h1>${t('Gracias')}</h1></div></div>
+      <div class="ride-hero"><strong class="big-line">${t('Nos ha llegado')}</strong><small>${t('Lo revisamos para corregirlo. Si nos has dejado un contacto, te escribimos.')}</small></div>
+      <button type="button" class="cta" data-act="back">${t('Volver')}</button>`;
+  }
+  const v = r.values;
+  const kinds = reportKinds().map(([id, text]) => `<label class="chip"><input type="radio" name="tipo" value="${id}"${v.tipo === id ? ' checked' : ''}><span>${text}</span></label>`).join('');
+  return `<div class="head">${back()}<div><h1>${t('¿Algo no cuadra?')}</h1><small>${t('Cuéntanos qué has visto y lo corregimos.')}</small></div></div>
+    ${r.label ? `<p class="report-about">${t('Sobre')}: <strong>${esc(r.label)}</strong></p>` : ''}
+    <form id="report-form" class="report" novalidate>
+      <fieldset><legend>${t('¿Qué pasa?')}</legend><div class="chips">${kinds}</div></fieldset>
+      <label class="field"><span>${t('Cuéntanoslo con tus palabras')} <small>${t('(si quieres)')}</small></span><textarea name="texto" rows="3" maxlength="1000" placeholder="${t('Por ejemplo: el de las 10:15 pasó a las 10:30')}">${esc(v.texto)}</textarea></label>
+      <label class="field"><span>${t('Tu correo o teléfono, si quieres respuesta')} <small>${t('(si quieres)')}</small></span><input name="contacto" type="text" maxlength="120" autocomplete="email" value="${esc(v.contacto)}"></label>
+      <label class="trap" aria-hidden="true">Web <input name="web" tabindex="-1" autocomplete="off"></label>
+      <p class="form-error" role="alert"${r.error ? '' : ' hidden'}>${esc(r.error)}</p>
+      <button type="submit" class="cta"${r.sending ? ' disabled' : ''}>${r.sending ? t('Enviando…') : t('Enviar')}</button>
+    </form>
+    <p class="foot">${t('Solo guardamos lo que escribes aquí y qué estabas mirando en la web.')} <a href="${privacyHref()}">${t('Privacidad')}</a></p>`;
+}
+
+async function sendReport(form) {
+  const r = state.report;
+  if (!r || r.sending) return;
+  const data = new FormData(form);
+  r.values = { tipo: String(data.get('tipo') ?? ''), texto: String(data.get('texto') ?? '').trim(), contacto: String(data.get('contacto') ?? '').trim() };
+  if (!r.values.tipo && !r.values.texto) {
+    r.error = t('Elige qué pasa o cuéntanoslo con tus palabras.');
+    renderSheet();
+    return;
+  }
+  r.error = '';
+  r.sending = true;
+  renderSheet();
+  try {
+    const res = await fetch('/api/reportes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...r.values, donde: r.label, contexto: r.ctx, web: String(data.get('web') ?? '') }),
+    });
+    if (res.status === 429) r.error = t('Has enviado varios mensajes seguidos. Prueba otra vez más tarde.');
+    else if (!res.ok) r.error = t('No se ha podido enviar. Prueba otra vez en un momento.');
+    else r.sent = true;
+  } catch {
+    r.error = t('No se ha podido enviar. Mira si tienes conexión y prueba otra vez.');
+  }
+  r.sending = false;
+  if (state.report === r) renderSheet();
+}
+
+/* ---------- Instalar Xa Vén en el móvil ---------- */
+let installPrompt = null;
+const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const canInstall = () => !standalone() && Boolean(installPrompt || isIOS());
+const touchScreen = matchMedia('(pointer: coarse)');
+function installLater() {
+  try { return localStorage.getItem('xaven-instalar') === 'luego'; } catch { return false; }
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  if (net) renderSheet();
+});
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+  if (net) renderSheet();
+});
+
+function installCard() {
+  if (!canInstall() || installLater() || !touchScreen.matches) return '';
+  return `<div class="install-card"><img src="icon-192.png" width="36" height="36" alt="">
+    <span class="now-text"><strong>${t('Instala Xa Vén')}</strong><small>${isIOS() ? t('Así te llegan los avisos también en iPhone.') : t('Se abre como una app y te llegan los avisos.')}</small></span>
+    <button type="button" class="ghost" data-act="install">${t('Instalar')}</button>
+    <button type="button" class="install-x" data-act="install-later" aria-label="${t('Ahora no')}" title="${t('Ahora no')}">×</button></div>`;
+}
+
+async function install() {
+  if (installPrompt) {
+    const event = installPrompt;
+    installPrompt = null;
+    try {
+      await event.prompt();
+      await event.userChoice;
+    } catch { /* el navegador no ha dejado instalar ahora */ }
+    renderSheet();
+    return;
+  }
+  state.returnTo = state.view;
+  go('install');
+}
+
+// Dibujos de los tres pasos de Safari. Los botones de iOS van con su nombre en castellano, como los ve la gente.
+const STEP_SHARE = `<svg viewBox="0 0 280 64" role="img" aria-hidden="true"><rect x="1" y="1" width="278" height="62" rx="14" fill="var(--soft)" stroke="var(--rule)"/><path d="M26 24l-8 8 8 8" fill="none" stroke="var(--mute)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><rect x="52" y="18" width="150" height="28" rx="10" fill="var(--surface)" stroke="var(--rule)"/><text x="127" y="37" text-anchor="middle" font-size="12" textLength="134" lengthAdjust="spacingAndGlyphs" fill="var(--mute)" font-family="system-ui, sans-serif">bus.marcogugliandolo.com</text><circle cx="242" cy="32" r="22" fill="none" stroke="var(--me)" stroke-width="3"/><path d="M236 30h-3v13h18V30h-3M242 21v15M237 26l5-5 5 5" fill="none" stroke="var(--me)" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const STEP_ADD = `<svg viewBox="0 0 280 92" role="img" aria-hidden="true"><rect x="1" y="1" width="278" height="90" rx="14" fill="var(--soft)" stroke="var(--rule)"/><text x="18" y="28" font-size="14" fill="var(--mute)" font-family="system-ui, sans-serif">Copiar</text><path d="M14 44h252" stroke="var(--rule)"/><rect x="6" y="50" width="268" height="34" rx="9" fill="var(--surface)" stroke="var(--me)" stroke-width="2.5"/><text x="18" y="72" font-size="14" font-weight="700" fill="var(--ink)" font-family="system-ui, sans-serif">Añadir a pantalla de inicio</text><rect x="240" y="57" width="20" height="20" rx="5" fill="none" stroke="var(--ink)" stroke-width="2"/><path d="M250 62v10M245 67h10" stroke="var(--ink)" stroke-width="2" stroke-linecap="round"/></svg>`;
+const STEP_DONE = `<svg viewBox="0 0 280 64" role="img" aria-hidden="true"><rect x="1" y="1" width="278" height="62" rx="14" fill="var(--soft)" stroke="var(--rule)"/><text x="18" y="37" font-size="14" fill="var(--mute)" font-family="system-ui, sans-serif">Cancelar</text><text x="140" y="37" text-anchor="middle" font-size="14" font-weight="700" fill="var(--ink)" font-family="system-ui, sans-serif">Xa Vén</text><rect x="206" y="16" width="62" height="32" rx="10" fill="none" stroke="var(--me)" stroke-width="2.5"/><text x="237" y="37" text-anchor="middle" font-size="14" font-weight="700" fill="var(--me)" font-family="system-ui, sans-serif">Añadir</text></svg>`;
+
+function installHTML() {
+  if (standalone()) {
+    return `<div class="head">${back()}<div><h1>${t('Ya tienes Xa Vén instalada')}</h1></div></div>
+      <p class="intro">${t('Ábrela siempre desde su icono: así te llegan los avisos de la campana.')}</p>`;
+  }
+  return `<div class="head">${back()}<div><h1>${t('Instalar Xa Vén en el iPhone')}</h1><small>${t('Tres pasos y solo una vez')}</small></div></div>
+    <ol class="install-steps">
+      <li><span class="step-n">1</span><div><p>${t('Toca el botón Compartir: el cuadrado con una flecha hacia arriba. Si no lo ves, toca antes «⋯».')}</p>${STEP_SHARE}</div></li>
+      <li><span class="step-n">2</span><div><p>${t('Baja un poco y toca «Añadir a pantalla de inicio».')}</p>${STEP_ADD}</div></li>
+      <li><span class="step-n">3</span><div><p>${t('Toca «Añadir». Xa Vén aparece con su icono entre tus apps.')}</p>${STEP_DONE}</div></li>
+    </ol>
+    <p class="intro">${t('A partir de ahí, ábrela desde el icono: así te llegan los avisos de la campana aunque tengas el móvil bloqueado.')}</p>
+    <p class="foot">${t('Si no ves «Añadir a pantalla de inicio», abre esta página en Safari.')}</p>`;
+}
+
+/* ---------- Letra grande ---------- */
+const bigText = () => document.documentElement.dataset.letra === 'grande';
+function setBigText(on) {
+  if (on) document.documentElement.dataset.letra = 'grande';
+  else delete document.documentElement.dataset.letra;
+  try { localStorage.setItem('xaven-letra', on ? 'grande' : 'normal'); } catch { /* solo esta visita */ }
+}
+const sizeSwitch = () => `<button type="button" class="size-switch" data-act="big-text" aria-pressed="${bigText()}"><span class="size-aa" aria-hidden="true">A<b>A</b></span>${t('Letra grande')}</button>`;
+const prefs = () => `<div class="prefs">${langSwitch()}${sizeSwitch()}</div>`;
+
+/** Con el formulario abierto no se vuelve a pintar (se perdería lo escrito): solo cambian el error y el botón. */
+function syncReportForm() {
+  const r = state.report;
+  const error = $('#report-form .form-error');
+  error.textContent = r.error;
+  error.hidden = !r.error;
+  const button = $('#report-form button[type="submit"]');
+  button.disabled = r.sending;
+  button.textContent = r.sending ? t('Enviando…') : t('Enviar');
 }
 
 let lastHTML = '';
 function renderSheet() {
+  if (state.view === 'report' && state.report && !state.report.sent && $('#report-form')) {
+    syncReportForm();
+    return;
+  }
   if (state.view === 'plan' && $('#plan-form')) {
     const results = planResultsHTML();
     const box = $('#plan-results');
@@ -1586,7 +1775,7 @@ function renderSheet() {
     }
     return;
   }
-  const html = { home: homeHTML, stop: stopHTML, bus: busHTML, menu: menuHTML, line: lineHTML, search: searchHTML, notices: noticesHTML, sim: simHTML, plan: planHTML, trip: tripHTML, 'ride-pick': ridePickHTML, 'ride-share': rideShareHTML, ride: rideHTML }[state.view]();
+  const html = { home: homeHTML, stop: stopHTML, bus: busHTML, menu: menuHTML, line: lineHTML, search: searchHTML, notices: noticesHTML, sim: simHTML, plan: planHTML, trip: tripHTML, 'ride-pick': ridePickHTML, 'ride-share': rideShareHTML, ride: rideHTML, report: reportHTML, install: installHTML }[state.view]();
   if (html !== lastHTML) {
     $('#sheet-body').innerHTML = html;
     lastHTML = html;
@@ -1758,11 +1947,11 @@ async function loadStopExtras() {
 /* ---------- Acciones ---------- */
 function go(view) {
   if (view !== 'bus') state.wait = null;
-  if (view !== state.view && !['search', 'notices', 'ride-pick', 'ride-share'].includes(state.view)) state.previous = state.view;
+  if (view !== state.view && !['search', 'notices', 'ride-pick', 'ride-share', 'report', 'install'].includes(state.view)) state.previous = state.view;
   state.view = view;
   state.bellFor = null;
   document.body.dataset.view = view;
-  $('#sheet').dataset.size = ['menu', 'search', 'plan', 'ride-pick', 'ride-share'].includes(view) ? 'tall' : 'mid';
+  $('#sheet').dataset.size = ['menu', 'search', 'plan', 'ride-pick', 'ride-share', 'report', 'install'].includes(view) ? 'tall' : 'mid';
   $('#simpanel').hidden = view !== 'sim';
   if (view === 'sim') syncSimPanel();
   renderSheet();
@@ -1913,6 +2102,14 @@ function goHome() {
 }
 
 function goBack() {
+  if (state.view === 'report' || state.view === 'install') {
+    const to = state.returnTo ?? 'home';
+    state.returnTo = null;
+    state.report = null;
+    if (to === 'home') goHome();
+    else go(to);
+    return;
+  }
   if (state.view === 'trip') { state.plan.trip = null; go('plan'); return; }
   if (state.view === 'ride-pick' || state.view === 'ride-share') { state.follow = true; go('bus'); followCamera(700); return; }
   if (state.view === 'ride') { goHome(); return; }
@@ -2012,6 +2209,11 @@ function locate() {
 
 function wire() {
   $('#sheet-body').addEventListener('input', (e) => {
+    if (e.target.closest?.('#report-form') && state.report?.error) {
+      state.report.error = '';
+      syncReportForm();
+      return;
+    }
     if (!e.target.classList?.contains('plan-input')) return;
     const { field } = e.target.dataset;
     state.plan.field = field;
@@ -2021,6 +2223,11 @@ function wire() {
     renderSheet();
     $('#sheet-body').scrollTop = 0;
     updatePlanMap();
+  });
+  $('#sheet-body').addEventListener('submit', (e) => {
+    if (e.target.id !== 'report-form') return;
+    e.preventDefault();
+    sendReport(e.target);
   });
   $('#sheet-body').addEventListener('focusin', (e) => {
     if (!e.target.classList?.contains('plan-input')) return;
@@ -2038,6 +2245,17 @@ function wire() {
     else if (act === 'line') selectLine(el.dataset.number);
     else if (act === 'follow') selectBus(el.dataset.key);
     else if (act === 'notices') go('notices');
+    else if (act === 'report') openReport();
+    else if (act === 'install') install();
+    else if (act === 'install-later') {
+      try { localStorage.setItem('xaven-instalar', 'luego'); } catch { /* vuelve a salir en la próxima visita */ }
+      renderSheet();
+    } else if (act === 'big-text') {
+      setBigText(!bigText());
+      lastHTML = '';
+      renderSheet();
+      syncSheetVar();
+    }
     else if (act === 'line-dir') {
       state.lineDir = Number(el.dataset.index);
       state.follow = false;
@@ -2315,8 +2533,22 @@ function wire() {
 
   window.addEventListener('hashchange', () => {
     const id = location.hash.slice(1);
+    if (id === 'reportar' && state.view !== 'report') openReport();
     if (net.stopById.has(id) && id !== state.stopId) selectStop(id);
   });
+}
+
+/** Los avisos de obras: la copia que el servidor lee de GitHub y, si no responde, la que trae la web. */
+async function loadWorks() {
+  try {
+    const res = await fetch('/api/obras');
+    const data = res.ok ? await res.json() : null;
+    if (Array.isArray(data?.avisos)) { worksData = data.avisos; renderSheet(); return; }
+  } catch { /* sin servidor: la copia de la web */ }
+  try {
+    const data = await fetch('data/obras.json').then((r) => r.json());
+    if (Array.isArray(data?.avisos)) { worksData = data.avisos; renderSheet(); }
+  } catch { /* sin avisos */ }
 }
 
 async function start() {
@@ -2331,6 +2563,8 @@ async function start() {
   };
   document.body.dataset.view = state.view;
   translateDom();
+  loadWorks();
+  setInterval(loadWorks, 30 * 60000);
   loadFavs();
   loadRide();
   wire();
@@ -2356,7 +2590,8 @@ async function start() {
   await initMap();
   updatePins();
   const initial = location.hash.slice(1);
-  if (net.stopById.has(initial)) selectStop(initial);
+  if (initial === 'reportar') openReport();
+  else if (net.stopById.has(initial)) selectStop(initial);
   else if (state.ride) {
     state.busKey = state.ride.key;
     state.follow = true;

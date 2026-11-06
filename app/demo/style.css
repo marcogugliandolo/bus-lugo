@@ -373,3 +373,69 @@ a.row { color: inherit; text-decoration: none; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* Ajustes de la portada: idioma y letra grande */
+.prefs { display: flex; flex-wrap: wrap; gap: 8px; }
+.prefs .lang { flex: 2 1 220px; }
+.size-switch { flex: 1 1 140px; display: flex; align-items: center; justify-content: center; gap: 8px; height: 44px; border: 1px solid var(--rule); border-radius: 10px; background: transparent; font-size: var(--t-note); font-weight: 700; color: var(--mute); }
+.size-switch[aria-pressed="true"] { border-color: var(--ink); background: var(--soft); color: var(--ink); }
+.size-aa { font-family: var(--display); font-size: 13px; line-height: 1; }
+.size-aa b { font-size: 19px; }
+.foot a { color: inherit; font-weight: 700; text-underline-offset: 2px; }
+.link-btn { align-self: flex-start; min-height: 44px; padding: 0; border: 0; background: transparent; color: var(--ink); font-size: var(--t-note); font-weight: 700; text-align: left; text-decoration: underline; text-underline-offset: 3px; }
+.foot .link-btn, small .link-btn { display: inline; min-height: 0; padding: 6px 0; font: inherit; font-weight: 700; color: inherit; }
+.home-foot { margin-top: -6px; }
+.link-btn + .foot { margin-top: -10px; }
+
+/* Instalar Xa Vén */
+.install-card { display: flex; align-items: center; gap: 12px; padding: 10px 4px 10px 14px; border: 1px solid var(--rule); border-radius: 14px; }
+.install-card img { flex: none; border-radius: 10px; }
+.install-card strong { font-size: var(--t-body); line-height: 1.2; }
+.install-card small { font-size: var(--t-note); line-height: 1.3; color: var(--mute); }
+.install-card .ghost { flex: none; padding: 0 14px; font-size: var(--t-action); }
+.install-x { flex: none; width: 36px; height: 44px; padding: 0; border: 0; background: transparent; color: var(--mute); font-size: 24px; line-height: 1; }
+.install-steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 18px; }
+.install-steps li { display: flex; align-items: flex-start; gap: 12px; }
+.install-steps li > div { flex: 1; min-width: 0; display: grid; gap: 8px; }
+.install-steps p { font-size: var(--t-body); line-height: 1.35; }
+.install-steps svg { display: block; width: 100%; max-width: 320px; height: auto; }
+.step-n { flex: none; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--ink); color: var(--on-ink); font-size: var(--t-note); font-weight: 700; }
+
+/* ¿Algo no cuadra? */
+.report { display: grid; gap: 16px; }
+.report fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.report legend { margin-bottom: 8px; padding: 0; font-size: var(--t-note); font-weight: 700; color: var(--mute); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip { position: relative; display: inline-flex; }
+.chip input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.chip span { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 14px; border-radius: 22px; background: var(--soft); font-size: var(--t-action); font-weight: 700; line-height: 1.2; }
+.chip input:checked + span { background: var(--ink); color: var(--on-ink); }
+.chip input:focus-visible + span { outline: 3px solid var(--me); outline-offset: 2px; }
+.field { display: grid; gap: 6px; font-size: var(--t-note); font-weight: 700; }
+.field small { font-size: var(--t-label); font-weight: 400; color: var(--mute); }
+.field textarea, .field input { width: 100%; min-height: 48px; padding: 12px; border: 1px solid var(--rule); border-radius: 12px; background: var(--surface); color: var(--ink); font: inherit; font-size: max(16px, var(--t-body)); font-weight: 400; resize: vertical; }
+.field textarea:focus, .field input:focus { border-color: var(--me); outline: 2px solid var(--me); outline-offset: -1px; }
+.trap { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.form-error { padding: 10px 12px; border-radius: 10px; background: var(--warn-bg); color: var(--warn-fg); font-size: var(--t-note); line-height: 1.35; }
+.report-about { margin-top: -6px; font-size: var(--t-note); line-height: 1.35; color: var(--mute); }
+.report-about strong { color: var(--ink); }
+.cta:disabled { opacity: .6; }
+
+@media (max-width: 359.98px) {
+  .install-card img { display: none; }
+  .install-card .ghost { padding: 0 10px; }
+}
+
+/* Letra grande: todo el panel crece; el mapa queda igual */
+html[data-letra="grande"] {
+  --t-time: 37px; --t-title: 25px; --t-big: 20px; --t-body: 19px; --t-action: 18px; --t-note: 17px; --t-label: 16px; --t-foot: 15px;
+}
+html[data-letra="grande"] body { font-size: 19px; }
+html[data-letra="grande"] .search input, html[data-letra="grande"] .plan-input, html[data-letra="grande"] .sim-row, html[data-letra="grande"] .chain-sep { font-size: 18px; }
+html[data-letra="grande"] .seg button { font-size: 16px; }
+html[data-letra="grande"] #clock { font-size: 15px; }
+html[data-letra="grande"] .src { font-size: 14px; }
+html[data-letra="grande"] .menu-btn { font-size: 16px; }
+html[data-letra="grande"] .badge { height: 34px; line-height: 34px; }
+html[data-letra="grande"] .pin span { height: 36px; font-size: 16px; line-height: 36px; }
+html[data-letra="grande"] .bell { min-width: 48px; height: 48px; border-radius: 24px; }
