@@ -3,65 +3,67 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Xa Vén</title>
-<meta name="description" content="Xa Vén: mira por dónde va tu bus en Lugo y cuándo llega a tu parada.">
+<title>Xa Vén · Los buses de Lugo</title>
+<meta name="description" content="Xa Vén: mira por dónde va tu bus en Lugo y cuándo llega a tu parada. Avisos en el móvil, tus paradas guardadas y en gallego o castellano.">
 <meta name="theme-color" content="#111318">
+<link rel="canonical" href="https://bus.marcogugliandolo.com/demo/">
 <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="stylesheet" href="vendor/maplibre-gl.css">
 <link rel="stylesheet" href="style.css">
+<script>try { var l = localStorage.getItem('xaven-lingua'); if (l === 'gl' || (!l && /^gl\b/i.test(navigator.language || ''))) document.documentElement.lang = 'gl'; } catch (e) {}</script>
 </head>
 <body>
-<div id="map" aria-label="Mapa de Lugo con los buses en ruta"></div>
-<p id="nomap" hidden>Tu navegador no puede dibujar el mapa. Las paradas y los horarios funcionan igual.</p>
+<div id="map" data-t-label="Mapa de Lugo con los buses en ruta" aria-label="Mapa de Lugo con los buses en ruta"></div>
+<p id="nomap" hidden data-t="Tu navegador no puede dibujar el mapa. Las paradas y los horarios funcionan igual.">Tu navegador no puede dibujar el mapa. Las paradas y los horarios funcionan igual.</p>
 
 <aside class="side">
   <p class="brand"><img src="icon.svg" width="30" height="30" alt="">Xa Vén</p>
   <div class="top">
     <label class="search" for="q">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>
-      <span class="sr">Buscar parada o línea</span>
-      <input id="q" type="search" placeholder="Busca tu parada" autocomplete="off" enterkeyhint="search">
+      <span class="sr" data-t="Buscar parada o línea">Buscar parada o línea</span>
+      <input id="q" type="search" placeholder="Busca tu parada" data-t-placeholder="Busca tu parada" autocomplete="off" enterkeyhint="search">
     </label>
     <button type="button" id="menu" class="round menu-btn">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
-      Líneas
+      <span data-t="Líneas">Líneas</span>
     </button>
     <button type="button" id="theme" class="round"></button>
   </div>
-  <section id="sheet" data-size="mid" aria-label="Información">
-    <button type="button" id="grab" aria-label="Cambiar el tamaño del panel"><span></span></button>
+  <section id="sheet" data-size="mid" data-t-label="Información" aria-label="Información">
+    <button type="button" id="grab" data-t-label="Cambiar el tamaño del panel" aria-label="Cambiar el tamaño del panel"><span></span></button>
     <div id="sheet-body"></div>
     <div id="simpanel" hidden>
-      <label for="sim-time" class="sim-row"><span>Hora</span><output id="sim-out">10:00</output></label>
+      <label for="sim-time" class="sim-row"><span data-t="Hora">Hora</span><output id="sim-out">10:00</output></label>
       <input id="sim-time" type="range" min="300" max="1439" step="1" value="600">
-      <div class="seg" role="group" aria-label="Tipo de día">
-        <button type="button" data-day="laborable">Laborable</button>
-        <button type="button" data-day="sabado">Sábado</button>
-        <button type="button" data-day="domingo">Domingo</button>
+      <div class="seg" role="group" data-t-label="Tipo de día" aria-label="Tipo de día">
+        <button type="button" data-day="laborable" data-t="Laborable">Laborable</button>
+        <button type="button" data-day="sabado" data-t="Sábado">Sábado</button>
+        <button type="button" data-day="domingo" data-t="Domingo">Domingo</button>
       </div>
-      <div class="seg" role="group" aria-label="Velocidad">
+      <div class="seg" role="group" data-t-label="Velocidad" aria-label="Velocidad">
         <button type="button" data-speed="1">×1</button>
         <button type="button" data-speed="10">×10</button>
         <button type="button" data-speed="60">×60</button>
       </div>
-      <button type="button" id="sim-live" class="ghost">Volver a ahora</button>
+      <button type="button" id="sim-live" class="ghost" data-t="Volver a ahora">Volver a ahora</button>
     </div>
   </section>
 </aside>
 
 <button type="button" id="clock"></button>
 
-<button type="button" id="locate" class="round" aria-label="Buscar la parada más cercana a mí">
+<button type="button" id="locate" class="round" data-t-label="Buscar la parada más cercana a mí" aria-label="Buscar la parada más cercana a mí">
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 3 10.5l7.5 3 3 7.5z"></path></svg>
 </button>
 <div class="zoom">
-  <button type="button" id="zoom-in" aria-label="Acercar">+</button>
-  <button type="button" id="zoom-out" aria-label="Alejar">−</button>
+  <button type="button" id="zoom-in" data-t-label="Acercar" aria-label="Acercar">+</button>
+  <button type="button" id="zoom-out" data-t-label="Alejar" aria-label="Alejar">−</button>
 </div>
-<button type="button" id="credit" aria-label="Créditos del mapa">i</button>
+<button type="button" id="credit" data-t-label="Créditos del mapa" aria-label="Créditos del mapa">i</button>
 <div id="toast" role="status" hidden></div>
 
 <script src="vendor/maplibre-gl.js"></script>

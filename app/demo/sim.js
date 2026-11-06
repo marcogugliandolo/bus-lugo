@@ -137,10 +137,10 @@ function pointAt(dir, targetMetres) {
 /** Hora de paso de una carrera por una parada del sentido. */
 export const passTime = (svc, run, stopIndex) => svc.dep[run] + svc.off[stopIndex];
 
-/** Todos los buses en ruta en el minuto `t` de un día de tipo `kind`. */
-export function busesAt(net, kind, nowMinutes, { linear = false } = {}) {
+/** Todos los buses en ruta en el minuto `t` de un día de tipo `kind`. Con `lines`, solo los de esas líneas. */
+export function busesAt(net, kind, nowMinutes, { linear = false, lines = net.lines } = {}) {
   const buses = [];
-  for (const line of net.lines) {
+  for (const line of lines) {
     const wait = linear ? new Map() : (line.dirs.some((d) => d.svc[kind]) ? layovers(net, line, kind) : new Map());
     line.dirs.forEach((dir, dirIndex) => {
       const svc = dir.svc[kind];
@@ -193,7 +193,7 @@ export function busesAt(net, kind, nowMinutes, { linear = false } = {}) {
 }
 
 /** Próximos pasos por una parada, del más cercano al más lejano. */
-export function arrivalsAt(net, stopId, kind, nowMinutes, { grace = 0, horizon = 120 } = {}) {
+export function arrivalsAt(net, stopId, kind, nowMinutes, { grace = 0, horizon = 120, limit = 3 } = {}) {
   const stop = net.stopById.get(stopId);
   if (!stop) return [];
   const out = [];
@@ -212,7 +212,7 @@ export function arrivalsAt(net, stopId, kind, nowMinutes, { grace = 0, horizon =
         })
         .filter((r) => r.minutes >= nowMinutes - grace && r.minutes <= nowMinutes + horizon)
         .sort((a, b) => a.minutes - b.minutes)
-        .slice(0, 3)
+        .slice(0, limit)
         .forEach(({ minutes, run }) => {
           out.push({
             key: `${line.id}|${dirIndex}|${run}`,
@@ -229,6 +229,49 @@ export function arrivalsAt(net, stopId, kind, nowMinutes, { grace = 0, horizon =
     });
   }
   return out.sort((a, b) => a.minutes - b.minutes);
+}
+
+/**
+ * El punto del recorrido más cercano a una posición: cuántos metros lleva recorridos
+ * y a cuántos metros de la calle está. Sirve para saber si alguien va de verdad en el bus.
+ */
+export function projectOnPath(dir, lat, lng) {
+  const kx = Math.cos(lat * toRad) * 111320;
+  const ky = 110540;
+  let best = { metres: 0, off: Infinity };
+  for (let i = 0; i < dir.path.length - 1; i++) {
+    const [aLat, aLng] = dir.path[i];
+    const [bLat, bLng] = dir.path[i + 1];
+    const ax = (aLng - lng) * kx;
+    const ay = (aLat - lat) * ky;
+    const dx = (bLng - aLng) * kx;
+    const dy = (bLat - aLat) * ky;
+    const len2 = dx * dx + dy * dy;
+    const u = len2 > 0 ? Math.min(1, Math.max(0, -(ax * dx + ay * dy) / len2)) : 0;
+    const off = Math.hypot(ax + dx * u, ay + dy * u);
+    if (off < best.off) best = { metres: dir.cum[i] + (dir.cum[i + 1] - dir.cum[i]) * u, off };
+  }
+  return best;
+}
+
+/** Índice de la última parada que queda atrás tras recorrer `metres` del sentido. */
+export function stopIndexAt(dir, metres) {
+  let i = 0;
+  while (i < dir.stops.length - 1 && dir.cum[dir.pi[i + 1]] <= metres) i++;
+  return i;
+}
+
+/** A qué hora debería pasar una carrera por el punto que está a `metres` del principio del recorrido. */
+export function scheduledTimeAt(dir, svc, run, metres) {
+  const last = dir.stops.length - 1;
+  const at = (i) => dir.cum[dir.pi[i]];
+  if (metres <= at(0)) return passTime(svc, run, 0);
+  if (metres >= at(last)) return passTime(svc, run, last);
+  const i = stopIndexAt(dir, metres);
+  const from = at(i);
+  const to = at(i + 1);
+  const frac = to > from ? (metres - from) / (to - from) : 0;
+  return passTime(svc, run, i) + (passTime(svc, run, i + 1) - passTime(svc, run, i)) * frac;
 }
 
 /** Trozo de recorrido entre un bus y una parada de su sentido, para dibujarlo en el mapa. */
