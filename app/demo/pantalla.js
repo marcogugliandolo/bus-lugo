@@ -74,8 +74,20 @@ function renderBoard(ids) {
   if (board.dataset.shown !== html) {
     board.innerHTML = html;
     board.dataset.shown = html;
+    fitRows();
   }
 }
+
+/** Solo las filas que caben enteras: en una tele no se puede bajar con el dedo. */
+function fitRows() {
+  for (const list of document.querySelectorAll('#board .list')) {
+    const rows = [...list.children];
+    rows.forEach((row) => { row.hidden = false; });
+    const bottom = list.getBoundingClientRect().bottom;
+    rows.forEach((row, i) => { if (i > 0 && row.getBoundingClientRect().bottom > bottom + 1) row.hidden = true; });
+  }
+}
+window.addEventListener('resize', fitRows);
 
 /* ---------- Elegir parada ---------- */
 const chosen = [];

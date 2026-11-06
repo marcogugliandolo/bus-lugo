@@ -47,7 +47,8 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const norm = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-const desktop = matchMedia('(min-width: 1000px)');
+// Panel a la izquierda: en el ordenador y en el móvil puesto en horizontal (mismo criterio que style.css).
+const desktop = matchMedia('(min-width: 1000px), (min-width: 600px) and (max-height: 540px) and (orientation: landscape)');
 
 let net;
 let map = null;
@@ -305,7 +306,7 @@ async function initMap() {
 
 function mapPadding() {
   const sheet = desktop.matches ? 0 : $('#sheet').getBoundingClientRect().height;
-  const side = desktop.matches ? 408 : 0;
+  const side = desktop.matches ? $('.side').getBoundingClientRect().width : 0;
   const top = desktop.matches ? 70 : 130;
   const lead = ['line', 'bus', 'ride'].includes(state.view) ? 40 : 0; // el bus resaltado es más grande
   const tag = ['stop', 'plan', 'trip'].includes(state.view) ? 70 : 0; // deja sitio al nombre de la parada

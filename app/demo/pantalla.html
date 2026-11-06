@@ -41,7 +41,7 @@ a { color: inherit; }
 .foot { margin-top: auto; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 20px; font-size: clamp(12px, 1.1vw, 18px); color: var(--mute); }
 .foot .lg { display: inline-flex; align-items: center; gap: 8px; }
 .foot .lg i { width: 10px; height: 10px; border-radius: 50%; background: var(--live); }
-.two { flex: 1; min-height: 0; overflow: hidden; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); gap: clamp(14px, 2vw, 32px); }
+.two { flex: 1; min-height: 0; overflow: hidden; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: clamp(14px, 2vw, 32px); }
 .two h2 { margin: 0 0 8px; font-size: clamp(16px, 1.8vw, 30px); color: var(--mute); }
 .two section { display: flex; flex-direction: column; min-height: 0; }
 .two .dest { font-size: clamp(17px, 1.9vw, 34px); white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
@@ -51,6 +51,7 @@ a { color: inherit; }
 body:hover #exit, #exit:focus { opacity: 1; }
 
 /* Elegir parada */
+@media (max-height: 480px) { #board { gap: 8px; } .foot { font-size: 11px; } }
 #setup { max-width: 720px; margin: 0 auto; padding: 32px 20px 60px; display: grid; gap: 18px; }
 #setup h1 { margin: 0; font-family: var(--display); font-size: 34px; line-height: 1.1; }
 #setup p { margin: 0; line-height: 1.45; color: var(--mute); }

@@ -39,3 +39,4 @@ thead th { color: var(--mute); font-size: 14px; }
 tbody th { width: 3.5em; color: var(--mute); }
 .empty { color: var(--mute); }
 .foot { max-width: 860px; margin: 0 auto; padding: 20px; border-top: 1px solid var(--rule); color: var(--mute); font-size: 14px; }
+@media (max-width: 400px) { th, td { padding: 6px 6px; } .top nav { gap: 12px; } main, .top, .foot { padding-left: 16px; padding-right: 16px; } }
