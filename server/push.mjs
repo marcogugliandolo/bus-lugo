@@ -12,6 +12,7 @@ import { createStopTimes } from './operador.mjs';
 import { createCoaches } from './interurbanos.mjs';
 import { createWorks } from './obras.mjs';
 import { createReports } from './reportes.mjs';
+import { createWhatsApp, whatsappConfig } from './whatsapp.mjs';
 import { loadNetwork } from './red.mjs';
 
 const MAX_PENDING = 2000;
@@ -51,7 +52,7 @@ function saveJSON(path, value, mode = 0o600) {
   renameSync(tmp, path);
 }
 
-export function createService({ dataDir, send = webpush.sendNotification.bind(webpush), subject = 'https://bus.marcogugliandolo.com', now = Date.now, net = null, sim = null, stopTimes: stopTimesOptions = {}, coaches: coachOptions = {}, works: worksOptions = {}, reports: reportsOptions = {} }) {
+export function createService({ dataDir, send = webpush.sendNotification.bind(webpush), subject = 'https://bus.marcogugliandolo.com', now = Date.now, net = null, sim = null, stopTimes: stopTimesOptions = {}, coaches: coachOptions = {}, works: worksOptions = {}, reports: reportsOptions = {}, whatsapp: whatsappOptions = {} }) {
   mkdirSync(dataDir, { recursive: true });
   const keysPath = join(dataDir, 'claves.json');
   const avisosPath = join(dataDir, 'avisos.json');
@@ -94,7 +95,8 @@ export function createService({ dataDir, send = webpush.sendNotification.bind(we
   const coaches = net ? createCoaches({ net, sim, dataDir, now, ...coachOptions }) : null;
   const works = createWorks(worksOptions);
   const reports = createReports({ dataDir, now, ...reportsOptions });
-  const modules = [live, stopTimes, coaches, works, reports].filter(Boolean);
+  const whatsapp = createWhatsApp({ dataDir, now, ...whatsappOptions });
+  const modules = [live, stopTimes, coaches, works, reports, whatsapp].filter(Boolean);
 
   const server = http.createServer(async (req, res) => {
     const path = new URL(req.url, 'http://x').pathname;
@@ -152,7 +154,7 @@ export function createService({ dataDir, send = webpush.sendNotification.bind(we
     return undefined;
   });
 
-  return { server, tick, publicKey: keys.publicKey, pending: () => avisos.length, live, stopTimes, coaches, works, reports };
+  return { server, tick, publicKey: keys.publicKey, pending: () => avisos.length, live, stopTimes, coaches, works, reports, whatsapp };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
@@ -169,11 +171,20 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     ...network,
     works: { repo: env.REPO || null, branch: env.BRANCH || 'main', token: env.GITHUB_TOKEN || '' },
     reports: { key: env.REPORTES_CLAVE || '', notifyUrl: env.NTFY_URL || '', base: env.PUSH_SUBJECT || '' },
+    whatsapp: { ...whatsappConfig(env), base: env.PUSH_SUBJECT || '' },
   });
   service.server.listen(3001, () => {
     console.log(`[api] escuchando en 3001${env.OPERADOR === '1' ? ', con los minutos de las paradas' : ''}`);
     console.log(`[reportes] para leer los mensajes de «¿Algo no cuadra?»: ${service.reports.link()}`);
+    console.log(service.whatsapp.enabled ? '[whatsapp] avisos por WhatsApp activados' : '[whatsapp] apagado (faltan las variables WHATSAPP_…)');
   });
+  let waBusy = false;
+  setInterval(async () => {
+    if (waBusy) return;
+    waBusy = true;
+    try { await service.whatsapp.tick(); } catch (err) { console.warn(`[whatsapp] ${err?.message}`); }
+    waBusy = false;
+  }, 10000);
   service.works.tick();
   setInterval(() => service.works.tick(), 10 * 60000);
   setInterval(() => service.reports.prune(), 6 * 3600000);

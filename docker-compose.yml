@@ -30,6 +30,13 @@
 #   NTFY_URL      para que te llegue un aviso al móvil (app ntfy) con cada mensaje de «¿Algo no cuadra?»,
 #                 por ejemplo https://ntfy.sh/un-nombre-largo-que-solo-sepas-tu. Solo lleva el tipo y el sitio.
 #   REPORTES_CLAVE otra clave para leer los mensajes (si no se pone, se crea sola la primera vez)
+#
+# Avisos por WhatsApp (apagados si falta alguna; ver README, «Avisos por WhatsApp»):
+#   WHATSAPP_TOKEN        token permanente de la app de Meta (usuario del sistema)
+#   WHATSAPP_PHONE_ID     identificador del número de teléfono (Phone number ID)
+#   WHATSAPP_NUMERO       el número de Xa Vén con prefijo y sin +, p. ej. 34600111222
+#   WHATSAPP_VERIFY       una palabra que eliges tú y pones también en Meta al configurar el webhook
+#   WHATSAPP_APP_SECRET   el «App secret» de la app de Meta (para comprobar que los mensajes vienen de Meta)
 
 services:
   bus-lugo:
@@ -118,6 +125,12 @@ services:
       GTFS_URL: ${GTFS_URL:-}
       NTFY_URL: ${NTFY_URL:-}
       REPORTES_CLAVE: ${REPORTES_CLAVE:-}
+      WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
+      WHATSAPP_PHONE_ID: ${WHATSAPP_PHONE_ID:-}
+      WHATSAPP_NUMERO: ${WHATSAPP_NUMERO:-}
+      WHATSAPP_VERIFY: ${WHATSAPP_VERIFY:-}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      WHATSAPP_API_VERSION: ${WHATSAPP_API_VERSION:-}
       TZ: Europe/Madrid
     entrypoint: ["/bin/sh", "-c"]
     command:

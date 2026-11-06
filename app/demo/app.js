@@ -84,6 +84,7 @@ const state = {
   ridePick: null,
   rideTarget: null,
   report: null,            // «¿Algo no cuadra?»
+  whatsapp: null,          // { number } si el servidor envía avisos por WhatsApp
   returnTo: null,          // a dónde vuelve «Volver» desde el formulario o la instalación
 };
 
@@ -920,6 +921,31 @@ async function schedulePush(alert) {
 
 function cancelPush(alert) {
   if (alert?.pushed) fetch(`/api/avisos/${alert.id}`, { method: 'DELETE' }).catch(() => {});
+  if (alert?.waAsked) fetch(`/api/whatsapp/aviso/${alert.wa}`, { method: 'DELETE' }).catch(() => {});
+}
+
+/* ---------- Avisos por WhatsApp (solo si el servidor los tiene activados) ---------- */
+const WA_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const waCode = () => Array.from(crypto.getRandomValues(new Uint8Array(8)), (n) => WA_LETTERS[n % WA_LETTERS.length]).join('');
+const WA_ICON = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5a8.5 8.5 0 0 0-7.4 12.7L3.5 20.5l4.4-1.1A8.5 8.5 0 1 0 12 3.5z"></path></svg>';
+
+async function loadWhatsApp() {
+  try {
+    const res = await fetch('/api/whatsapp');
+    const data = res.ok ? await res.json() : null;
+    state.whatsapp = data?.enabled && /^\d{6,16}$/.test(data.number ?? '') ? { number: data.number } : null;
+  } catch { state.whatsapp = null; }
+}
+
+/** El botón para que el aviso llegue también por WhatsApp. Abre WhatsApp con el mensaje ya escrito. */
+function waOffer(alert) {
+  if (!alert?.wa || !state.whatsapp || !clock().live) return '';
+  if (alert.at - Date.now() > 23 * 3600000 || alert.at < Date.now()) return '';
+  const href = `https://wa.me/${state.whatsapp.number}?text=${encodeURIComponent(t('Avísame del bus (código {code})', { code: alert.wa }))}`;
+  const link = (cls, text) => `<a class="${cls}" href="${href}" target="_blank" rel="noopener" data-act="whatsapp" data-id="${esc(alert.id)}">${text}</a>`;
+  return alert.waAsked
+    ? `<p class="wa-note">${t('Envía el mensaje que se ha abierto en WhatsApp y te contestaremos para confirmar.')} ${link('wa-again', t('Abrir WhatsApp otra vez'))}</p>`
+    : link('wa-btn', `${WA_ICON}${t('Recibirlo también por WhatsApp')}`);
 }
 
 /** Crea o cambia un aviso. Devuelve el resultado de programarlo en el móvil. */
@@ -930,7 +956,7 @@ async function setAlert({ key, stopId, stopIndex, kind = 'on', before }) {
   const { line } = keyParts(key);
   const old = state.alerts.find((x) => x.key === key && x.stopId === stopId && kindOf(x) === kind);
   cancelPush(old);
-  const alert = { id: crypto.randomUUID(), key, stopId, stopIndex, kind, name: stop.name, number: line.number, before, at: Date.now() + (minutes - before - clock().t) * 60000, delayAt: liveOf(key)?.delay ?? 0, pushed: false };
+  const alert = { id: crypto.randomUUID(), key, stopId, stopIndex, kind, name: stop.name, number: line.number, before, at: Date.now() + (minutes - before - clock().t) * 60000, delayAt: liveOf(key)?.delay ?? 0, pushed: false, wa: waCode() };
   state.alerts = state.alerts.filter((x) => x !== old);
   state.alerts.push(alert);
   saveAlerts();
@@ -954,7 +980,7 @@ function bellChooser(a) {
   return `<div class="bell-opts"><p>${kind === 'off' ? t('¿Cuánto antes de llegar a tu parada te avisamos?') : t('¿Cuánto antes te avisamos?')}</p><div class="bell-row">
     ${options.map((n) => `<button type="button" data-act="bell-set" ${data} data-before="${n}" aria-pressed="${armed?.before === n}">${n} min</button>`).join('')}
     ${armed ? `<button type="button" class="off" data-act="bell-off" ${data}>${t('Quitar')}</button>` : ''}
-  </div><small>${alertHelp()}</small></div>`;
+  </div><small>${alertHelp()}</small>${waOffer(armed)}</div>`;
 }
 
 function arrivalRow(a) {
@@ -1296,7 +1322,7 @@ function rideHTML() {
   return `<div class="head">${back()}<span class="badge" style="--c:${line.color}">${esc(line.number)}</span><div><small>${t('Hacia {dest}', { dest: esc(nice(dir.dest)) })}</small></div></div>
     <div class="ride-hero"><span class="now-label">${t('Te bajas en')}</span><strong class="big-line">${esc(nice(target.name))}</strong><small>${esc(leftText)}</small></div>
     <p class="wait-note">${esc(gps)}</p>
-    <div class="bell-opts"><p>${t('Te avisamos antes de llegar, aunque bloquees el móvil:')}</p><div class="bell-row">${options}</div><small>${alertHelp()}</small></div>
+    <div class="bell-opts"><p>${t('Te avisamos antes de llegar, aunque bloquees el móvil:')}</p><div class="bell-row">${options}</div><small>${alertHelp()}</small>${waOffer(alert)}</div>
     ${share}
     ${bus && !bus.parkedUntil ? `<div class="rows"><h2>${t('Hasta tu parada')}</h2></div>${stripHTML(bus, { full: true, target: ride.target, until: true })}` : ''}
     <button type="button" class="cta second" data-act="ride-end">${t('Ya me he bajado')}</button>${foot()}`;
@@ -2252,6 +2278,22 @@ function wire() {
     else if (act === 'follow') selectBus(el.dataset.key);
     else if (act === 'notices') go('notices');
     else if (act === 'report') openReport();
+    else if (act === 'whatsapp') {
+      // El enlace abre WhatsApp por su cuenta; aquí solo se deja el aviso preparado en el servidor.
+      const alert = state.alerts.find((x) => x.id === el.dataset.id);
+      if (alert) {
+        const { title, body } = alertTexts(alert);
+        fetch('/api/whatsapp/pedir', {
+          method: 'POST',
+          keepalive: true,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code: alert.wa, at: alert.at, title: title.slice(0, 80), body: body.slice(0, 200), lang: getLang() }),
+        }).catch(() => {});
+        alert.waAsked = true;
+        saveAlerts();
+        setTimeout(renderSheet, 400);
+      }
+    }
     else if (act === 'install') install();
     else if (act === 'install-later') {
       try { localStorage.setItem('xaven-instalar', 'luego'); } catch { /* vuelve a salir en la próxima visita */ }
@@ -2317,7 +2359,8 @@ function wire() {
     } else if (act === 'bell-set') {
       const { key, stop: stopId, kind } = el.dataset;
       const before = Number(el.dataset.before);
-      state.bellFor = null;
+      // Con WhatsApp, el panel sigue abierto para ofrecerlo.
+      if (!state.whatsapp) state.bellFor = null;
       const pending = setAlert({ key, stopId, stopIndex: Number(el.dataset.index), kind, before });
       renderSheet();
       const result = await pending;
@@ -2571,6 +2614,7 @@ async function start() {
   translateDom();
   loadWorks();
   setInterval(loadWorks, 30 * 60000);
+  loadWhatsApp().then(() => renderSheet());
   loadFavs();
   loadRide();
   wire();

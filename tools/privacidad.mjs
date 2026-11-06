@@ -11,7 +11,7 @@ const es = `<article class="prose">
 <li>No hace falta registrarse: Xa Vén no sabe quién eres.</li>
 <li>No hay cookies de seguimiento, ni analítica, ni publicidad.</li>
 <li>Tu ubicación se usa en tu móvil y no se guarda en ningún sitio.</li>
-<li>Solo sale de tu móvil lo que tú decides enviar: un aviso de la campana, por dónde va el bus si compartes «Voy en este bus» o un mensaje de «¿Algo no cuadra?».</li>
+<li>Solo sale de tu móvil lo que tú decides enviar: un aviso de la campana, un aviso por WhatsApp, por dónde va el bus si compartes «Voy en este bus» o un mensaje de «¿Algo no cuadra?».</li>
 </ul></div>
 
 <h2>Lo que se queda en tu móvil</h2>
@@ -22,6 +22,10 @@ const es = `<article class="prose">
 
 <h2>Los avisos de la campana</h2>
 <p>Para avisarte aunque tengas la web cerrada, tu navegador crea una dirección de avisos anónima (no lleva tu número ni tu nombre) y la manda al servidor de Xa Vén con la hora del aviso y su texto, por ejemplo «Línea 5: llega en 5 min». El servidor la guarda solo hasta enviar el aviso y después la borra. El aviso llega a través del servicio de notificaciones de tu navegador o de tu móvil (Google, Apple, Mozilla o Microsoft), como en cualquier web con notificaciones.</p>
+
+<h2>Avisos por WhatsApp</h2>
+<p>Si eliges «Recibirlo también por WhatsApp», se abre WhatsApp con un mensaje ya escrito que lleva un código, y eres tú quien lo envía al número de Xa Vén. Al recibirlo, el servidor ve tu número de teléfono y tu mensaje. Tu número se guarda solo para mandarte ese aviso (como mucho, unas horas) y se borra en cuanto se envía. Para quitarlo antes, contesta BORRAR. No se usa para nada más y no te escribimos por nuestra cuenta. Si escribes otra cosa a ese número, te contestamos una vez cómo funciona, sin guardar tu número.</p>
+<p>WhatsApp es de Meta: los mensajes pasan por sus servidores y Meta los trata según sus propias condiciones, como cualquier conversación de WhatsApp.</p>
 
 <h2>«Voy en este bus»</h2>
 <p>Solo si eliges compartir, y solo mientras tienes esa pantalla abierta. Cada 15 segundos se envía qué bus es y por dónde va (el punto, redondeado a unos 10 metros, y la precisión del GPS). Con eso se calcula si va con retraso y quien espera lo ve en directo.</p>
@@ -38,7 +42,7 @@ const es = `<article class="prose">
 <p>Como cualquier web, el servidor que da paso a Xa Vén anota de forma técnica las peticiones que recibe (dirección IP, página pedida y hora) para funcionar y defenderse de ataques. Esos registros no se usan para nada más y se borran periódicamente.</p>
 
 <h2>Quién está detrás</h2>
-<p>Xa Vén es un proyecto personal de Marco Gugliandolo López, sin relación con la empresa que lleva los buses ni con el Concello de Lugo. Lo que activas tú (ubicación, avisos, compartir y mensajes) se hace con tu permiso y lo puedes retirar cuando quieras. Los registros técnicos se guardan por el interés en mantener la web funcionando y segura. No se vende ni se cede ningún dato a nadie.</p>
+<p>Xa Vén es un proyecto personal de Marco Gugliandolo López, sin relación con la empresa que lleva los buses ni con el Concello de Lugo. Lo que activas tú (ubicación, avisos, WhatsApp, compartir y mensajes) se hace con tu permiso y lo puedes retirar cuando quieras. Los registros técnicos se guardan por el interés en mantener la web funcionando y segura. No se vende ni se cede ningún dato a nadie.</p>
 
 <h2>Tus derechos</h2>
 <p>Puedes pedir ver, corregir o borrar tus datos, u oponerte a que se usen, escribiendo desde <a href="/demo/#reportar">«¿Algo no cuadra?»</a> (elige «Otra cosa»). Como Xa Vén no sabe quién eres, casi siempre basta con borrar los datos del sitio en el navegador o quitar los permisos. Si crees que no se han respetado tus derechos, puedes reclamar ante la <a href="https://www.aepd.es/">Agencia Española de Protección de Datos</a>.</p>
@@ -54,7 +58,7 @@ const gl = `<article class="prose">
 <li>Non fai falta rexistrarse: Xa Vén non sabe quen es.</li>
 <li>Non hai cookies de seguimento, nin analítica, nin publicidade.</li>
 <li>A túa localización úsase no teu móbil e non se garda en ningún sitio.</li>
-<li>Só sae do teu móbil o que ti decides enviar: un aviso da campá, por onde vai o bus se compartes «Vou neste bus» ou unha mensaxe de «Algo non cadra?».</li>
+<li>Só sae do teu móbil o que ti decides enviar: un aviso da campá, un aviso por WhatsApp, por onde vai o bus se compartes «Vou neste bus» ou unha mensaxe de «Algo non cadra?».</li>
 </ul></div>
 
 <h2>O que queda no teu móbil</h2>
@@ -65,6 +69,10 @@ const gl = `<article class="prose">
 
 <h2>Os avisos da campá</h2>
 <p>Para avisarte aínda que teñas a web pechada, o teu navegador crea un enderezo de avisos anónimo (non leva o teu número nin o teu nome) e mándao ao servidor de Xa Vén coa hora do aviso e o seu texto, por exemplo «Liña 5: chega en 5 min». O servidor gárdao só ata enviar o aviso e despois bórrao. O aviso chega a través do servizo de notificacións do teu navegador ou do teu móbil (Google, Apple, Mozilla ou Microsoft), coma en calquera web con notificacións.</p>
+
+<h2>Avisos por WhatsApp</h2>
+<p>Se escolles «Recibilo tamén por WhatsApp», ábrese WhatsApp cunha mensaxe xa escrita que leva un código, e es ti quen a envía ao número de Xa Vén. Ao recibila, o servidor ve o teu número de teléfono e a túa mensaxe. O teu número gárdase só para mandarche ese aviso (como moito, unhas horas) e bórrase en canto se envía. Para quitalo antes, contesta BORRAR. Non se usa para nada máis e non che escribimos pola nosa conta. Se escribes outra cousa a ese número, contestámosche unha vez como funciona, sen gardar o teu número.</p>
+<p>WhatsApp é de Meta: as mensaxes pasan polos seus servidores e Meta trátaas segundo as súas propias condicións, coma calquera conversa de WhatsApp.</p>
 
 <h2>«Vou neste bus»</h2>
 <p>Só se escolles compartir, e só mentres tes esa pantalla aberta. Cada 15 segundos envíase que bus é e por onde vai (o punto, arredondado a uns 10 metros, e a precisión do GPS). Con iso calcúlase se vai con atraso e quen agarda veo en directo.</p>
@@ -81,7 +89,7 @@ const gl = `<article class="prose">
 <p>Coma calquera web, o servidor que dá paso a Xa Vén anota de forma técnica as peticións que recibe (enderezo IP, páxina pedida e hora) para funcionar e defenderse de ataques. Eses rexistros non se usan para nada máis e bórranse periodicamente.</p>
 
 <h2>Quen está detrás</h2>
-<p>Xa Vén é un proxecto persoal de Marco Gugliandolo López, sen relación coa empresa que leva os buses nin co Concello de Lugo. O que activas ti (localización, avisos, compartir e mensaxes) faise co teu permiso e podes retiralo cando queiras. Os rexistros técnicos gárdanse polo interese en manter a web funcionando e segura. Non se vende nin se cede ningún dato a ninguén.</p>
+<p>Xa Vén é un proxecto persoal de Marco Gugliandolo López, sen relación coa empresa que leva os buses nin co Concello de Lugo. O que activas ti (localización, avisos, WhatsApp, compartir e mensaxes) faise co teu permiso e podes retiralo cando queiras. Os rexistros técnicos gárdanse polo interese en manter a web funcionando e segura. Non se vende nin se cede ningún dato a ninguén.</p>
 
 <h2>Os teus dereitos</h2>
 <p>Podes pedir ver, corrixir ou borrar os teus datos, ou opoñerte a que se usen, escribindo desde <a href="/demo/#reportar">«Algo non cadra?»</a> (escolle «Outra cousa»). Como Xa Vén non sabe quen es, case sempre abonda con borrar os datos do sitio no navegador ou quitar os permisos. Se cres que non se respectaron os teus dereitos, podes reclamar ante a <a href="https://www.aepd.es/">Axencia Española de Protección de Datos</a>.</p>

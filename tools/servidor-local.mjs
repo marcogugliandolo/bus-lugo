@@ -1,12 +1,14 @@
 // Prueba Xa Vén en el ordenador, sin Docker: sirve la web y la API como en el servidor.
 //   cd server && npm ci && cd .. && node tools/servidor-local.mjs   ->  http://localhost:8080/
-// Los datos (avisos, retrasos, interurbanos) se guardan en ./.datos-locales. Variables: PUERTO, OPERADOR=1.
+// Los datos (avisos, retrasos, interurbanos) se guardan en ./.datos-locales. Variables: PUERTO, OPERADOR=1,
+// y las WHATSAPP_… para probar los avisos por WhatsApp.
 import http from 'node:http';
 import { createReadStream, existsSync, mkdirSync, statSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createService } from '../server/push.mjs';
 import { loadNetwork } from '../server/red.mjs';
+import { whatsappConfig } from '../server/whatsapp.mjs';
 
 const ROOT = fileURLToPath(new URL('../app/', import.meta.url));
 const DATA = fileURLToPath(new URL('../.datos-locales/', import.meta.url));
@@ -20,7 +22,9 @@ const api = createService({
   coaches: { enabled: process.env.INTERURBANOS === '1' },
   works: { file: fileURLToPath(new URL('../app/demo/data/obras.json', import.meta.url)) },
   reports: { base: `http://localhost:${Number(process.env.PUERTO) || 8080}` },
+  whatsapp: { ...whatsappConfig(), base: `http://localhost:${Number(process.env.PUERTO) || 8080}` },
 });
+setInterval(() => api.whatsapp.tick().catch(() => {}), 10000);
 console.log(`Mensajes de «¿Algo no cuadra?»: ${api.reports.link()}`);
 setInterval(() => api.tick().catch(() => {}), 10000);
 setInterval(() => api.live?.fold(), 60000);

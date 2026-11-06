@@ -7,7 +7,7 @@ Los autobuses urbanos de Lugo en el móvil, la tablet y el ordenador: sus 24 lí
 - **El mapa con los buses moviéndose.** Cada bus va donde debería ir según el horario, y la web lo dice («según horario»).
 - **En directo cuando alguien va dentro.** Quien pulsa «Voy en este bus» y acepta compartir corrige ese bus para todos: se pone verde y sus horas pasan a ser «en directo».
 - **«Suele ir 3 min tarde».** Con lo que comparten los viajeros, cada salida aprende su retraso habitual.
-- **Avisos al móvil aunque esté bloqueado:** antes de que llegue el bus y antes de bajarse.
+- **Avisos al móvil aunque esté bloqueado:** antes de que llegue el bus y antes de bajarse. Y, si se activa, también **por WhatsApp**.
 - **Tus paradas** en la portada, con sus próximos buses nada más abrir.
 - **Funciona sin cobertura:** la web y los horarios se quedan guardados en el móvil.
 - **Pantalla de parada** para una tele, una tablet o una Raspberry Pi.
@@ -64,6 +64,26 @@ Desde el menú, el pie de cada parada, línea o bus, o `/demo/#reportar`, cualqu
 
 Se leen en `https://bus.marcogugliandolo.com/api/reportes/ver?clave=…`. La dirección completa sale en los registros de `bus-lugo-push` al arrancar (Portainer › Containers › bus-lugo-push › Logs, línea `[reportes]`). Guárdala en favoritos y no la compartas. Cada mensaje tiene su botón «Hecho, borrar»; los que queden se borran solos a los 180 días. Máximo 6 mensajes por hora y 20 al día desde el mismo sitio.
 
+## Avisos por WhatsApp
+
+Opcional y apagado mientras falte alguna variable `WHATSAPP_…`. Usa la plataforma oficial de WhatsApp Business (Cloud API de Meta); nada de bots no oficiales, que acaban con el número bloqueado.
+
+**Cómo funciona.** Al poner la campana, sale «Recibirlo también por WhatsApp». Al tocarlo se abre WhatsApp con un mensaje ya escrito («Avísame del bus (código K7M2Q9XA)») y la persona lo envía al número de Xa Vén. Meta nos pasa el mensaje, se junta con el aviso de ese código, se le contesta para confirmar y, a la hora, le llega el aviso. La web nunca ve su teléfono; el servidor lo guarda solo hasta enviar el aviso. Contestando BORRAR se quitan sus avisos. Como es la persona quien escribe primero, todo va dentro de las 24 horas que da WhatsApp para contestar, sin plantillas que aprobar; por eso no se ofrece para avisos a más de 23 horas.
+
+**Coste.** Cada aviso son dos mensajes (la confirmación y el aviso). Desde el 1 de octubre de 2026, Meta da 1.000 mensajes de este tipo gratis al mes por número; a partir de ahí cobra la tarifa de utilidad de España. Unos 500 avisos al mes salen gratis.
+
+**Ponerlo en marcha** (una vez):
+
+1. **Un número para Xa Vén** que no esté en la app de WhatsApp (o darlo de baja antes). Para probar, Meta da un número de prueba gratis que solo puede escribir a 5 teléfonos que añadas tú.
+2. En [developers.facebook.com](https://developers.facebook.com), **crea una app** de tipo empresa y añádele **WhatsApp**. En **WhatsApp › API Setup** añade el número y copia el **Phone number ID** → `WHATSAPP_PHONE_ID`. El número, con prefijo y sin `+` (por ejemplo `34600111222`) → `WHATSAPP_NUMERO`.
+3. En **Business Settings › System users**, crea un usuario del sistema (admin), asígnale la app y la cuenta de WhatsApp, y genera un token **sin caducidad** con los permisos `whatsapp_business_messaging` y `whatsapp_business_management` → `WHATSAPP_TOKEN`.
+4. En la app, **Settings › Basic**: copia el **App secret** → `WHATSAPP_APP_SECRET`, y pon como política de privacidad `https://bus.marcogugliandolo.com/privacidad/`.
+5. Inventa una palabra para `WHATSAPP_VERIFY`. Pon las cinco variables en el stack de Portainer y actualízalo. En los registros de `bus-lugo-push` debe salir `[whatsapp] avisos por WhatsApp activados`.
+6. En **WhatsApp › Configuration › Webhook**: Callback URL `https://bus.marcogugliandolo.com/api/whatsapp/webhook`, Verify token la palabra de `WHATSAPP_VERIFY`, **Verify and save**. En **Webhook fields**, suscríbete a **messages**.
+7. Pasa la app de **Development** a **Live** y, para cuando se pase de los mensajes gratis, añade una forma de pago en WhatsApp Manager.
+
+Si los mensajes de prueba funcionan pero los reales no llegan, casi siempre es que la app sigue en Development o que falta la suscripción a **messages**.
+
 ## La API (`server/`)
 
 El contenedor `bus-lugo-push` sirve todo `/api/` y guarda sus datos en el volumen `bus-lugo-avisos`. No hay nada que configurar ni secretos en el repositorio.
@@ -77,6 +97,7 @@ El contenedor `bus-lugo-push` sirve todo `/api/` y guarda sus datos en el volume
 | `/api/parada/<parada>` | Minutos del sistema de información de la parada, solo con `OPERADOR=1` (`operador.mjs`). |
 | `/api/obras` | Los avisos de obras, leídos de GitHub cada 10 minutos (`obras.mjs`). |
 | `/api/reportes` | Recibe los mensajes de «¿Algo no cuadra?»; `/api/reportes/ver` es la página privada para leerlos (`reportes.mjs`). |
+| `/api/whatsapp` | Avisos por WhatsApp: `pedir` desde la web y `webhook` para Meta, solo si están las variables (`whatsapp.mjs`). |
 
 **Privacidad de «Voy en este bus».** Solo se comparte si la persona lo acepta, y solo mientras tiene la pantalla abierta. El móvil envía la carrera y el punto redondeado a unos 10 m, sin ningún identificador. El servidor comprueba que esa carrera está en marcha y que el punto está sobre su recorrido, calcula el retraso y **no guarda la posición**. En memoria solo queda el retraso, que se olvida a los dos minutos. En disco, por cada salida y día, un único número: la mediana del retraso que se vio. Para limitar envíos usa la IP mezclada con un secreto que cambia cada día, y no la guarda.
 
